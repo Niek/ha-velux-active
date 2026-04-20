@@ -46,5 +46,5 @@ Tested so far:
 ## Notes
 
 - The integration currently focuses on cover support.
-- The underlying `pyatmo` dependency is temporarily pinned to a fork until VELUX support is merged upstream.
+- The underlying `pyatmo` dependency is temporarily pinned to [a fork](https://github.com/Niek/pyatmo) until VELUX support is merged upstream.
 - This is an unofficial integration and is not affiliated with VELUX or Netatmo.
