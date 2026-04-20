@@ -1,0 +1,6 @@
+{
+  "name": "Velux Active with Netatmo",
+  "domains": ["velux_active"],
+  "content_in_root": false,
+  "render_readme": true
+}

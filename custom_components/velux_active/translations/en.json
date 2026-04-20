@@ -1,0 +1,31 @@
+{
+  "title": "Velux Active with Netatmo",
+  "config": {
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Reauthentication was successful."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the Velux Active service.",
+      "invalid_auth": "Invalid email or password.",
+      "unknown": "Unexpected error."
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "password": "Password"
+        },
+        "description": "Update the password for {username}.",
+        "title": "Reauthenticate"
+      },
+      "user": {
+        "data": {
+          "password": "Password",
+          "username": "Email"
+        },
+        "description": "Log in with your Velux Active with Netatmo app details.",
+        "title": "Velux Active with Netatmo"
+      }
+    }
+  }
+}
