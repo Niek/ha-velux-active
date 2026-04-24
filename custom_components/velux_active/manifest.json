@@ -4,11 +4,12 @@
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/Niek/ha-velux-active",
+  "issue_tracker": "https://github.com/Niek/ha-velux-active/issues",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "loggers": ["pyatmo"],
   "requirements": [
-    "pyatmo @ git+https://github.com/Niek/pyatmo.git@3cc42c1"
+    "pyatmo@git+https://github.com/Niek/pyatmo.git@3cc42c1"
   ],
   "version": "0.1.0"
 }
