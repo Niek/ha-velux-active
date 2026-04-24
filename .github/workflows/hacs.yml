@@ -6,11 +6,16 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: HACS validation
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
       - name: HACS validation
         uses: hacs/action@main
         with:
