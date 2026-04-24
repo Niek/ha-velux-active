@@ -8,13 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import OAuthTokens, VeluxActiveClient
-from .const import (
-    CONF_ACCESS_TOKEN,
-    CONF_REFRESH_TOKEN,
-    CONF_TOKEN_EXPIRES_AT,
-    CONF_TOKEN_ISSUED_AT,
-    PLATFORMS,
-)
+from .const import PLATFORMS
 from .coordinator import VeluxActiveDataUpdateCoordinator
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
@@ -26,15 +20,10 @@ async def async_setup_entry(
 ) -> bool:
     """Set up Velux Active with Netatmo from a config entry."""
     def _handle_tokens(tokens: OAuthTokens) -> None:
-        updated_data = {**entry.data, **tokens.as_storage_dict()}
-        if all(entry.data.get(key) == updated_data.get(key) for key in (
-            CONF_ACCESS_TOKEN,
-            CONF_REFRESH_TOKEN,
-            CONF_TOKEN_EXPIRES_AT,
-            CONF_TOKEN_ISSUED_AT,
-        )):
+        token_data = tokens.as_storage_dict()
+        if all(entry.data.get(key) == value for key, value in token_data.items()):
             return
-        hass.config_entries.async_update_entry(entry, data=updated_data)
+        hass.config_entries.async_update_entry(entry, data={**entry.data, **token_data})
 
     coordinator = VeluxActiveDataUpdateCoordinator(
         hass,

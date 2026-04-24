@@ -48,6 +48,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
     def __init__(self, coordinator, module_id: str) -> None:
         """Initialize the cover."""
         super().__init__(coordinator, module_id)
+        # Keep HA responsive between 30s cloud polls after a command is accepted.
         self._motion_state: str | None = None
         self._motion_target_position: int | None = None
 

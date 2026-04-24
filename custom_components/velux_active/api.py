@@ -10,7 +10,7 @@ from typing import Any, Callable
 import aiohttp
 from pyatmo.account import AsyncAccount
 from pyatmo.auth import AbstractAsyncAuth
-from pyatmo.const import AUTH_REQ_ENDPOINT, DEFAULT_BASE_URL
+from pyatmo.const import AUTH_REQ_ENDPOINT
 from pyatmo.home import Home
 from pyatmo.modules import NXO
 
@@ -18,7 +18,6 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRES_AT,
-    CONF_TOKEN_ISSUED_AT,
 )
 
 DEFAULT_CLIENT_ID = "5931426da127d981e76bdd3f"
@@ -48,7 +47,6 @@ class OAuthTokens:
     access_token: str
     refresh_token: str | None
     expires_at: int | None
-    issued_at: int
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> OAuthTokens | None:
@@ -56,7 +54,6 @@ class OAuthTokens:
         access_token = str(data.get(CONF_ACCESS_TOKEN) or "")
         refresh_token = data.get(CONF_REFRESH_TOKEN)
         expires_at = data.get(CONF_TOKEN_EXPIRES_AT)
-        issued_at = data.get(CONF_TOKEN_ISSUED_AT)
 
         if not access_token and not refresh_token:
             return None
@@ -65,7 +62,6 @@ class OAuthTokens:
             access_token=access_token,
             refresh_token=str(refresh_token) if refresh_token else None,
             expires_at=int(expires_at) if expires_at is not None else None,
-            issued_at=int(issued_at) if issued_at is not None else int(time.time()),
         )
 
     def as_storage_dict(self) -> dict[str, Any]:
@@ -74,18 +70,7 @@ class OAuthTokens:
             CONF_ACCESS_TOKEN: self.access_token,
             CONF_REFRESH_TOKEN: self.refresh_token,
             CONF_TOKEN_EXPIRES_AT: self.expires_at,
-            CONF_TOKEN_ISSUED_AT: self.issued_at,
         }
-
-
-@dataclass(slots=True)
-class VeluxActiveAccountInfo:
-    """Account information used during config flow."""
-
-    title: str
-    username: str
-    home_ids: list[str]
-    home_names: list[str]
 
 
 @dataclass(slots=True)
@@ -108,26 +93,13 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         password: str,
         initial_tokens: OAuthTokens | None = None,
         token_updated: Callable[[OAuthTokens], None] | None = None,
-        base_url: str = DEFAULT_BASE_URL,
-        client_id: str = DEFAULT_CLIENT_ID,
-        client_secret: str = DEFAULT_CLIENT_SECRET,
-        app_version: str = DEFAULT_APP_VERSION,
-        scope: str = DEFAULT_SCOPE,
-        timeout: float = DEFAULT_TIMEOUT,
-        user_prefix: str = DEFAULT_USER_PREFIX,
     ) -> None:
         """Initialize the auth adapter."""
-        super().__init__(websession, base_url=base_url)
+        super().__init__(websession)
         self._username = username
         self._password = password
-        self._client_id = client_id
-        self._client_secret = client_secret
-        self._app_version = app_version
-        self._scope = scope
-        self._timeout = timeout
         self._token_updated = token_updated
         self._tokens: OAuthTokens | None = initial_tokens
-        self._user_prefix = user_prefix
 
     async def async_get_access_token(self) -> str:
         """Return a valid access token for pyatmo requests."""
@@ -154,8 +126,8 @@ class VeluxActiveAuth(AbstractAsyncAuth):
                 "grant_type": "password",
                 "username": self._username,
                 "password": self._password,
-                "scope": self._scope,
-                "user_prefix": self._user_prefix,
+                "scope": DEFAULT_SCOPE,
+                "user_prefix": DEFAULT_USER_PREFIX,
             }
         )
 
@@ -185,9 +157,9 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         """Request OAuth tokens."""
         url = f"{self.base_url}{AUTH_REQ_ENDPOINT}"
         data = {
-            "client_id": self._client_id,
-            "client_secret": self._client_secret,
-            "app_version": self._app_version,
+            "client_id": DEFAULT_CLIENT_ID,
+            "client_secret": DEFAULT_CLIENT_SECRET,
+            "app_version": DEFAULT_APP_VERSION,
             **payload,
         }
 
@@ -195,7 +167,7 @@ class VeluxActiveAuth(AbstractAsyncAuth):
             async with self.websession.post(
                 url,
                 data=data,
-                timeout=aiohttp.ClientTimeout(total=self._timeout),
+                timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
             ) as response:
                 try:
                     raw: Any = await response.json(content_type=None)
@@ -222,7 +194,6 @@ class VeluxActiveAuth(AbstractAsyncAuth):
                 str(raw["refresh_token"]) if raw.get("refresh_token") else None
             ),
             expires_at=expires_at,
-            issued_at=issued_at,
         )
         self._tokens = new_tokens
         if self._token_updated:
@@ -262,20 +233,13 @@ class VeluxActiveClient:
             token_updated=token_updated,
         )
         self._account = AsyncAccount(self._auth)
-        self._data = VeluxActiveData(user=None, homes={}, covers={})
         self._username = username
 
-    async def async_validate(self) -> VeluxActiveAccountInfo:
+    async def async_validate(self) -> str:
         """Validate credentials and return basic account info."""
         data = await self.async_update()
         home_names = [home.name for home in data.homes.values()]
-        title = home_names[0] if len(home_names) == 1 else self._username
-        return VeluxActiveAccountInfo(
-            title=title,
-            username=self._username,
-            home_ids=list(data.homes),
-            home_names=home_names,
-        )
+        return home_names[0] if len(home_names) == 1 else self._username
 
     async def async_update(self) -> VeluxActiveData:
         """Refresh topology and current status."""
@@ -290,21 +254,11 @@ class VeluxActiveClient:
             if isinstance(module, NXO)
         }
 
-        self._data = VeluxActiveData(
+        return VeluxActiveData(
             user=self._account.user,
             homes=dict(self._account.homes),
             covers=covers,
         )
-        return self._data
-
-    @property
-    def data(self) -> VeluxActiveData:
-        """Return the latest snapshot."""
-        return self._data
-
-    def get_cover(self, module_id: str) -> NXO:
-        """Return a cover by module ID."""
-        return self._data.covers[module_id]
 
     @property
     def tokens(self) -> OAuthTokens | None:

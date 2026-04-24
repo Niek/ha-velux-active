@@ -13,7 +13,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
     OAuthTokens,
-    VeluxActiveAccountInfo,
     VeluxActiveCannotConnect,
     VeluxActiveClient,
     VeluxActiveInvalidAuth,
@@ -41,7 +40,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._async_abort_entries_match({CONF_USERNAME: user_input[CONF_USERNAME]})
             try:
-                info, tokens = await self._async_validate_input(user_input)
+                title, tokens = await self._async_validate_input(user_input)
             except VeluxActiveInvalidAuth:
                 errors["base"] = "invalid_auth"
             except VeluxActiveCannotConnect:
@@ -52,7 +51,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(user_input[CONF_USERNAME].lower())
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=info.title,
+                    title=title,
                     data={**user_input, **tokens.as_storage_dict()},
                 )
 
@@ -107,7 +106,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_validate_input(
         self, user_input: Mapping[str, Any]
-    ) -> tuple[VeluxActiveAccountInfo, OAuthTokens]:
+    ) -> tuple[str, OAuthTokens]:
         """Validate the credentials."""
         client = VeluxActiveClient(
             async_get_clientsession(self.hass),
