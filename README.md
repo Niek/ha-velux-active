@@ -48,5 +48,4 @@ Tested so far:
 ## Notes
 
 - The integration currently focuses on cover support.
-- The integration uses the upstream `pyatmo` package for VELUX device support.
 - This is an unofficial integration and is not affiliated with VELUX or Netatmo.
