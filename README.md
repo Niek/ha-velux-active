@@ -48,5 +48,5 @@ Tested so far:
 ## Notes
 
 - The integration currently focuses on cover support.
-- The underlying `pyatmo` dependency is pinned to the upstream [`development`](https://github.com/jabesq-org/pyatmo/tree/development) branch until VELUX support is included in a released package.
+- The integration uses the upstream `pyatmo` package for VELUX device support.
 - This is an unofficial integration and is not affiliated with VELUX or Netatmo.
