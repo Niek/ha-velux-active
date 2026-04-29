@@ -27,6 +27,8 @@ Tested so far:
 
 ### HACS
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active)
+
 1. In HACS, add this repository as a custom repository with category `Integration`.
 2. Install `Velux Active with Netatmo`.
 3. Restart Home Assistant.
@@ -46,5 +48,5 @@ Tested so far:
 ## Notes
 
 - The integration currently focuses on cover support.
-- The underlying `pyatmo` dependency is temporarily pinned to [a fork](https://github.com/Niek/pyatmo) until VELUX support is merged upstream.
+- The underlying `pyatmo` dependency is pinned to the upstream [`development`](https://github.com/jabesq-org/pyatmo/tree/development) branch until VELUX support is included in a released package.
 - This is an unofficial integration and is not affiliated with VELUX or Netatmo.

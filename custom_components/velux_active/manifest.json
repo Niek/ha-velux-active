@@ -9,7 +9,7 @@
   "issue_tracker": "https://github.com/Niek/ha-velux-active/issues",
   "loggers": ["pyatmo"],
   "requirements": [
-    "pyatmo@git+https://github.com/Niek/pyatmo.git@3cc42c1"
+    "pyatmo@git+https://github.com/jabesq-org/pyatmo.git@development"
   ],
   "version": "0.1.0"
 }
