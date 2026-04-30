@@ -407,6 +407,25 @@ actions:
 
 ---
 
+## Entities
+
+After setup the following entities are created:
+
+**Per roof window** (requires signing keys):
+- `cover.window_name` — open, close, set position, stop
+- `button.window_name_go_to_secure_position` *(future — pending pyatmo support)*
+- `sensor.window_name_rain_position` *(future — pending pyatmo support)*
+- `sensor.window_name_secure_position` *(future — pending pyatmo support)*
+
+**Per roller shutter / awning blind:**
+- `cover.blind_name` — open, close, set position, stop
+
+**Gateway:**
+- `lock.velux_departure_mode` — departure mode lock
+- `binary_sensor.velux_gateway_rain_detected` — rain detection
+
+---
+
 ## Troubleshooting
 
 ### API rate limit errors (error code 26 / 429)
