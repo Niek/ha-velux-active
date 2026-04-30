@@ -287,7 +287,7 @@ Once authenticated, **tap a roof window to move it** (open or close it a little)
 You should see output like this in your logcat terminal:
 
 ```
-W velux-debug: Fik0lsHQYyQEf843ZryeZ5HOJc304WX9w9DkKjprdAc=
+W velux-debug: AAABBBCCC123ExampleHashSignKeyGoesHere456DDDEEEFFF=
 W velux-input: dGFyZ2V0X3Bvc2l0aW9uMjYxNzc3NDk2...
 ```
 
@@ -295,7 +295,7 @@ Also look in mitmproxy for a `POST /syncapi/v1/setstate` request. Select it and 
 
 ```json
 {
-  "sign_key_id": "AAAAAGnycF3Y3VQRAAK1Rw==",
+  "sign_key_id": "AAAAAExampleSignKeyId1234Rw==",
   ...
 }
 ```
