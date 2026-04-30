@@ -22,7 +22,7 @@ import aiohttp
 from homeassistant.components.lock import LockEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -101,8 +101,12 @@ class VeluxDepartureLock(CoordinatorEntity[VeluxActiveDataUpdateCoordinator], Lo
     def device_info(self) -> DeviceInfo:
         """Return device info — attach to the NXG gateway device."""
         bridge_id = self._get_bridge_id()
+        connections = (
+            {(CONNECTION_NETWORK_MAC, bridge_id)} if bridge_id else set()
+        )
         return DeviceInfo(
             configuration_url=CONTROL_URL,
+            connections=connections,
             identifiers={(DOMAIN, bridge_id or "velux_gateway")},
             manufacturer=MANUFACTURER,
             model="VELUX Gateway",
