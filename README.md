@@ -5,7 +5,7 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting fu
 - 🪟 **Roof windows** — open, close, set position, stop (requires one-time key extraction, see below)
 - 🪟 **Roller shutters & awning blinds** — open, close, set position, stop (works out of the box)
 - 🔒 **Departure mode** — lock/unlock all movement via the gateway (integrates with alarm systems)
-- 🌡️ **Sensors** — rain (via the VELUX gateway)
+- 🌡️ **Sensors** — rain, temperature, humidity, CO₂, light intensity (via the VELUX gateway)
 
 ---
 
@@ -364,6 +364,25 @@ When multiple windows are commanded simultaneously (e.g. via a group), they are 
 
 ---
 
+## Auto Ventilation
+
+Each roof window has an **Auto Ventilation** switch (`switch.window_name_auto_ventilation`). When enabled, the VELUX gateway automatically adjusts the window position based on indoor CO₂ levels, temperature and humidity. When disabled, the window only moves in response to manual commands from HA or the Velux app.
+
+This is useful for automations — for example, disabling auto ventilation when you leave home and re-enabling it when you return.
+
+```yaml
+# Disable auto ventilation when away
+- action: switch.turn_off
+  target:
+    entity_id:
+      - switch.window_1_auto_ventilation
+      - switch.window_2_auto_ventilation
+      - switch.window_3_auto_ventilation
+      - switch.window_4_auto_ventilation
+```
+
+---
+
 ## Departure Mode (Lock)
 
 The integration exposes the VELUX gateway's departure mode as a **lock entity** (`lock.velux_departure_mode`). When locked, the gateway disables all window and blind movement — useful for integrating with a home alarm system.
@@ -413,9 +432,7 @@ After setup the following entities are created:
 
 **Per roof window** (requires signing keys):
 - `cover.window_name` — open, close, set position, stop
-- `button.window_name_go_to_secure_position` *(future — pending pyatmo support)*
-- `sensor.window_name_rain_position` *(future — pending pyatmo support)*
-- `sensor.window_name_secure_position` *(future — pending pyatmo support)*
+- `switch.window_name_auto_ventilation` — enable/disable automatic ventilation algorithm
 
 **Per roller shutter / awning blind:**
 - `cover.blind_name` — open, close, set position, stop
@@ -423,6 +440,8 @@ After setup the following entities are created:
 **Gateway:**
 - `lock.velux_departure_mode` — departure mode lock
 - `binary_sensor.velux_gateway_rain_detected` — rain detection
+
+> **Note:** Secure position and rain position sensors are planned for a future release pending pyatmo support for these fields.
 
 ---
 
