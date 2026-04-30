@@ -24,7 +24,7 @@
           "hash_sign_key": "Hash Sign Key",
           "sign_key_id": "Sign Key ID"
         },
-        "description": "Enter your window signing keys to enable full control of roof windows (open, close, set position, stop). These are optional — roller shutters and blinds work without them. See the integration documentation for instructions on obtaining your keys.",
+        "description": "Enter your window signing keys to enable full control of roof windows (open, close, set position, stop). These are optional \u2014 roller shutters and blinds work without them. See the integration documentation for instructions on obtaining your keys.",
         "title": "Window Signing Keys (optional)"
       },
       "reauth_confirm": {
@@ -33,6 +33,18 @@
         },
         "description": "Update the password for {username}.",
         "title": "Reauthenticate"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "hash_sign_key": "Hash Sign Key",
+          "sign_key_id": "Sign Key ID"
+        },
+        "description": "Update your window signing keys. These are required for roof window control. Leave blank to disable window signing (blinds will still work).",
+        "title": "Update Window Signing Keys"
       }
     }
   }
