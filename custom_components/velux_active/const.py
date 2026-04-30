@@ -15,7 +15,7 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_TOKEN_EXPIRES_AT = "token_expires_at"
 CONF_HASH_SIGN_KEY = "hash_sign_key"
 CONF_SIGN_KEY_ID = "sign_key_id"
-PLATFORMS = [Platform.COVER]
+PLATFORMS = [Platform.COVER, Platform.LOCK]
 UPDATE_INTERVAL = timedelta(seconds=30)
 
 VELUX_API_URL = "https://app.velux-active.com"
