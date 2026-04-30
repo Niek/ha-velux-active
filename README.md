@@ -302,7 +302,7 @@ Also look in mitmproxy for a `POST /syncapi/v1/setstate` request. Select it and 
 
 Your two keys are:
 
-- **Hash Sign Key** — the value logged to `velux-debug` (e.g. `Fik0lsH...`)
+- **Hash Sign Key** — the value logged to `velux-debug` (e.g. `AAABBBCCC123ExampleHashSignKeyGoesHere456...`)
 - **Sign Key ID** — the `sign_key_id` value from the mitmproxy request body
 
 -----
@@ -364,7 +364,7 @@ logger:
 Then restart HA and look for log lines like:
 
 ```
-Cover entity created: id=53252e2618280508 name='Window 1' is_window=True signing=True
+Cover entity created: id=aabbcc1122334455 name='Window 1' is_window=True signing=True
 ```
 
 -----
