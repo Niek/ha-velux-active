@@ -79,6 +79,8 @@ class VeluxActiveData:
     covers: dict[str, Any]
 
 
+
+
 class VeluxActiveAuth(AbstractAsyncAuth):
     def __init__(
         self,
