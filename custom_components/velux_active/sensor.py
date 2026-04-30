@@ -13,16 +13,10 @@ import logging
 
 from homeassistant.components.sensor import (
     SensorEntity,
-    SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-    BinarySensorEntityDescription,
-)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -40,11 +34,6 @@ async def async_setup_entry(
     """Set up Velux Active sensor entities."""
     coordinator = entry.runtime_data
     entities: list = []
-
-    # Gateway sensors
-    bridge = _get_bridge(coordinator)
-    if bridge is not None:
-        entities.append(VeluxRainSensor(coordinator))
 
     # Per-window sensors
     for module_id, module in coordinator.data.covers.items():
@@ -71,46 +60,6 @@ def _get_bridge_id(coordinator) -> str | None:
             if type(module).__name__ == "NXG":
                 return module_id
     return None
-
-
-# ---------------------------------------------------------------------------
-# Gateway binary sensor — is_raining
-# ---------------------------------------------------------------------------
-
-class VeluxRainSensor(CoordinatorEntity[VeluxActiveDataUpdateCoordinator], BinarySensorEntity):
-    """Binary sensor for the VELUX gateway rain detector."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Rain Detected"
-    _attr_device_class = BinarySensorDeviceClass.MOISTURE
-
-    def __init__(self, coordinator: VeluxActiveDataUpdateCoordinator) -> None:
-        super().__init__(coordinator)
-        bridge_id = _get_bridge_id(coordinator)
-        self._attr_unique_id = f"{DOMAIN}_rain_sensor"
-        self._bridge_id = bridge_id
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return True if rain is detected."""
-        bridge = _get_bridge(self.coordinator)
-        if bridge is None:
-            return None
-        return bool(getattr(bridge, "is_raining", False))
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        connections = (
-            {(CONNECTION_NETWORK_MAC, self._bridge_id)} if self._bridge_id else set()
-        )
-        return DeviceInfo(
-            configuration_url=CONTROL_URL,
-            connections=connections,
-            identifiers={(DOMAIN, self._bridge_id or "velux_gateway")},
-            manufacturer=MANUFACTURER,
-            model="VELUX Gateway",
-            name="VELUX Gateway",
-        )
 
 
 # ---------------------------------------------------------------------------
