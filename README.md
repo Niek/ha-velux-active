@@ -5,7 +5,7 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting fu
 - 🪟 **Roof windows** — open, close, set position, stop (requires one-time key extraction, see below)
 - 🪟 **Roller shutters & awning blinds** — open, close, set position, stop (works out of the box)
 - 🔒 **Departure mode** — lock/unlock all movement via the gateway (integrates with alarm systems)
-- 🌡️ **Sensors** — temperature, humidity, CO₂, light intensity (via the VELUX gateway)
+- 🌡️ **Sensors** — rain (via the VELUX gateway)
 
 ---
 
