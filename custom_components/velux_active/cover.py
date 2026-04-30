@@ -153,7 +153,12 @@ class _BatchCommandManager:
         if not self._pending:
             return
 
-        commands = list(self._pending)
+        # Deduplicate by module ID — keep only the latest command per window
+        # This handles double-tap scenarios where the same window is commanded twice
+        seen: dict[str, dict] = {}
+        for cmd in self._pending:
+            seen[cmd["id"]] = cmd
+        commands = list(seen.values())
         self._pending.clear()
 
         timestamp = int(time.time())

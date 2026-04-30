@@ -17,8 +17,8 @@ from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
 
-FAST_POLL_INTERVAL = timedelta(seconds=10)
-FAST_POLL_DURATION = 60  # seconds of fast polling after a movement command
+FAST_POLL_INTERVAL = timedelta(seconds=15)
+FAST_POLL_DURATION = 45  # seconds of fast polling after a movement command
 
 
 class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
@@ -66,22 +66,23 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
     async def _async_update_data(self) -> VeluxActiveData:
         """Fetch the latest account state.
 
-        Topology (home/device structure) is fetched once at startup.
-        Subsequent polls only fetch current device status, halving API calls.
+        Topology (homesdata) is fetched once at startup and retried on
+        subsequent polls if it fails (e.g. due to rate limiting).
+        Regular polls only call homestatus, halving API usage.
         """
         try:
             if not self._topology_loaded:
                 await self.client.async_setup()
                 self._topology_loaded = True
             return await self.client.async_update()
-        except VeluxActiveInvalidAuth as err:
-            raise ConfigEntryAuthFailed("Authentication failed") from err
-        except (
-            VeluxActiveCannotConnect,
-            ApiHomeReachabilityError,
-            ApiError,
-            TimeoutError,
-        ) as err:
+        except (VeluxActiveCannotConnect, ApiHomeReachabilityError, ApiError, TimeoutError) as err:
+            err_str = str(err)
+            if "429" in err_str or "API limit" in err_str:
+                if self._fast_poll_task is not None and not self._fast_poll_task.done():
+                    self._fast_poll_task.cancel()
+                self.update_interval = UPDATE_INTERVAL
+                LOGGER.debug("Rate limited during setup — will retry topology on next poll")
+                self._topology_loaded = False  # Force retry next poll
             if (data := getattr(self, "data", None)) is not None:
                 LOGGER.debug(
                     "Keeping previous Velux Active data after transient update failure: %s",
@@ -91,3 +92,6 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
             raise UpdateFailed(
                 f"Error communicating with VELUX ACTIVE: {err or type(err).__name__}"
             ) from err
+        except VeluxActiveInvalidAuth as err:
+            raise ConfigEntryAuthFailed("Authentication failed") from err
+

@@ -237,11 +237,11 @@ class VeluxActiveClient:
         return home_names[0] if len(home_names) == 1 else self._username
 
     async def async_setup(self) -> None:
-        """Fetch topology once at startup. Topology rarely changes."""
+        """Fetch topology once at startup. Called once — homesdata is expensive."""
         await self._account.async_update_topology()
 
     async def async_update(self) -> VeluxActiveData:
-        """Fetch current device status only — topology is fetched once at startup."""
+        """Fetch current device status only. Topology is loaded once at startup."""
         for home_id in list(self._account.homes):
             try:
                 await self._account.async_update_status(home_id)
