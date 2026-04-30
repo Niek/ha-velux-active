@@ -4,6 +4,7 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting fu
 
 - 🪟 **Roof windows** — open, close, set position, stop (requires one-time key extraction, see below)
 - 🪟 **Roller shutters & awning blinds** — open, close, set position, stop (works out of the box)
+- 🔒 **Departure mode** — lock/unlock all movement via the gateway (integrates with alarm systems)
 - 🌡️ **Sensors** — temperature, humidity, CO₂, light intensity (via the VELUX gateway)
 
 ---
@@ -360,6 +361,49 @@ result = base64encode(hash).replace('+', '-').replace('/', '_')
 ```
 
 When multiple windows are commanded simultaneously (e.g. via a group), they are sent in a single API call with incrementing nonces (0, 1, 2, 3...) and the same timestamp — matching the behaviour of the official Velux app.
+
+---
+
+## Departure Mode (Lock)
+
+The integration exposes the VELUX gateway's departure mode as a **lock entity** (`lock.velux_departure_mode`). When locked, the gateway disables all window and blind movement — useful for integrating with a home alarm system.
+
+- **Locked** = away mode (all movement disabled)
+- **Unlocked** = home mode (normal operation)
+
+The lock state is read directly from the gateway on every poll — it survives HA restarts and reflects the true state even if departure mode was toggled from the Velux app.
+
+### Locking requires signing keys
+
+Activating departure mode (locking) works without signing keys. **Deactivating** departure mode (unlocking) requires the Hash Sign Key and Sign Key ID to be configured, as the API requires a signed command to re-enable movement for security reasons.
+
+### Example automation — activate with alarm
+
+```yaml
+alias: Velux lock when alarm set
+triggers:
+  - trigger: state
+    entity_id: alarm_control_panel.my_alarm
+    to:
+      - armed_away
+      - armed_home
+actions:
+  - action: lock.lock
+    target:
+      entity_id: lock.velux_departure_mode
+
+---
+
+alias: Velux unlock when alarm disarmed
+triggers:
+  - trigger: state
+    entity_id: alarm_control_panel.my_alarm
+    to: disarmed
+actions:
+  - action: lock.unlock
+    target:
+      entity_id: lock.velux_departure_mode
+```
 
 ---
 
