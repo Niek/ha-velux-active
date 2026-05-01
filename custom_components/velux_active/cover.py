@@ -211,10 +211,18 @@ class _BatchCommandManager:
                     json=payload,
                     headers=headers,
                 ) as response:
-                    result = await response.json(content_type=None)
-                    if not response.ok:
-                        error = HomeAssistantError(f"Signed setstate failed: {result}")
+                    # Handle empty responses (e.g. rate limit or auth failure)
+                    text = await response.text()
+                    if not text.strip():
+                        error = HomeAssistantError(
+                            f"Empty response from API (status {response.status}) "
+                            "— possibly rate limited or token expired"
+                        )
+                    elif not response.ok:
+                        error = HomeAssistantError(f"Signed setstate failed: {text}")
                     else:
+                        import json as _json
+                        result = _json.loads(text)
                         api_errors = result.get("body", {}).get("errors", [])
                         if api_errors:
                             error = HomeAssistantError(f"Signed setstate errors: {api_errors}")

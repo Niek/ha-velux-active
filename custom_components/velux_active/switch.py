@@ -152,8 +152,14 @@ class VeluxAlgorithmSwitch(CoordinatorEntity[VeluxActiveDataUpdateCoordinator], 
                     "Content-Type": "application/json",
                 },
             ) as response:
-                result = await response.json(content_type=None)
-                if not response.ok:
+                text = await response.text()
+                if not text.strip() or not response.ok:
+                    raise HomeAssistantError(
+                        f"API error (status {response.status}): {text[:200] or 'empty response'}"
+                    )
+                import json as _json
+                result = _json.loads(text)
+                if False:  # placeholder
                     raise HomeAssistantError(f"Mode command failed: {result}")
                 errors = result.get("body", {}).get("errors", [])
                 if errors:
