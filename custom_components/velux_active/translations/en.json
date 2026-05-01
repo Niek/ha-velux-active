@@ -11,20 +11,40 @@
       "unknown": "Unexpected error."
     },
     "step": {
+      "user": {
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        },
+        "description": "Log in with your Velux Active with Netatmo app details.",
+        "title": "Velux Active with Netatmo"
+      },
+      "keys": {
+        "data": {
+          "hash_sign_key": "Hash Sign Key",
+          "sign_key_id": "Sign Key ID"
+        },
+        "description": "Enter your window signing keys to enable full control of roof windows (open, close, set position, stop). These are optional \u2014 roller shutters and blinds work without them. See the integration documentation for instructions on obtaining your keys.",
+        "title": "Window Signing Keys (optional)"
+      },
       "reauth_confirm": {
         "data": {
           "password": "Password"
         },
         "description": "Update the password for {username}.",
         "title": "Reauthenticate"
-      },
-      "user": {
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
         "data": {
-          "password": "Password",
-          "username": "Email"
+          "hash_sign_key": "Hash Sign Key",
+          "sign_key_id": "Sign Key ID"
         },
-        "description": "Log in with your Velux Active with Netatmo app details.",
-        "title": "Velux Active with Netatmo"
+        "description": "Update your window signing keys. These are required for roof window control. Leave blank to disable window signing (blinds will still work).",
+        "title": "Update Window Signing Keys"
       }
     }
   }

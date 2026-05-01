@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import time
 from typing import Any, Callable
+import logging
 
 import aiohttp
 from pyatmo.account import AsyncAccount
@@ -19,6 +20,8 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRES_AT,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_CLIENT_ID = "5931426da127d981e76bdd3f"
 DEFAULT_CLIENT_SECRET = "6ae2d89d15e767ae5c56b456b452d319"
@@ -42,15 +45,12 @@ class VeluxActiveInvalidAuth(VeluxActiveError):
 
 @dataclass(slots=True)
 class OAuthTokens:
-    """Container for OAuth token data."""
-
     access_token: str
     refresh_token: str | None
     expires_at: int | None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> OAuthTokens | None:
-        """Build tokens from stored config entry data."""
         access_token = str(data.get(CONF_ACCESS_TOKEN) or "")
         refresh_token = data.get(CONF_REFRESH_TOKEN)
         expires_at = data.get(CONF_TOKEN_EXPIRES_AT)
@@ -65,7 +65,6 @@ class OAuthTokens:
         )
 
     def as_storage_dict(self) -> dict[str, Any]:
-        """Return a serializable token payload for config entry storage."""
         return {
             CONF_ACCESS_TOKEN: self.access_token,
             CONF_REFRESH_TOKEN: self.refresh_token,
@@ -75,16 +74,14 @@ class OAuthTokens:
 
 @dataclass(slots=True)
 class VeluxActiveData:
-    """Current snapshot of the Velux account."""
-
     user: str | None
     homes: dict[str, Home]
-    covers: dict[str, NXO]
+    covers: dict[str, Any]
+
+
 
 
 class VeluxActiveAuth(AbstractAsyncAuth):
-    """pyatmo auth adapter using the VELUX password grant."""
-
     def __init__(
         self,
         websession: aiohttp.ClientSession,
@@ -94,7 +91,6 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         initial_tokens: OAuthTokens | None = None,
         token_updated: Callable[[OAuthTokens], None] | None = None,
     ) -> None:
-        """Initialize the auth adapter."""
         super().__init__(websession)
         self._username = username
         self._password = password
@@ -102,7 +98,6 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         self._tokens: OAuthTokens | None = initial_tokens
 
     async def async_get_access_token(self) -> str:
-        """Return a valid access token for pyatmo requests."""
         if self._tokens and self._tokens.access_token and self._is_token_valid(self._tokens):
             return self._tokens.access_token
 
@@ -115,12 +110,11 @@ class VeluxActiveAuth(AbstractAsyncAuth):
             await self.async_login()
 
         if self._tokens is None:
-            msg = "No access token available"
-            raise VeluxActiveInvalidAuth(msg)
+            raise VeluxActiveInvalidAuth("No access token available")
+
         return self._tokens.access_token
 
     async def async_login(self) -> OAuthTokens:
-        """Authenticate using email and password."""
         return await self._async_request_tokens(
             {
                 "grant_type": "password",
@@ -132,10 +126,8 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         )
 
     async def async_refresh(self) -> OAuthTokens:
-        """Refresh the current access token."""
         if self._tokens is None or not self._tokens.refresh_token:
-            msg = "Refresh token is not available"
-            raise VeluxActiveInvalidAuth(msg)
+            raise VeluxActiveInvalidAuth("Refresh token is not available")
 
         return await self._async_request_tokens(
             {
@@ -145,16 +137,13 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         )
 
     def _is_token_valid(self, tokens: OAuthTokens) -> bool:
-        """Return whether the current token is still valid."""
         return tokens.expires_at is None or int(time.time()) < (tokens.expires_at - 60)
 
     @property
     def tokens(self) -> OAuthTokens | None:
-        """Return the latest OAuth token set."""
         return self._tokens
 
     async def _async_request_tokens(self, payload: dict[str, str]) -> OAuthTokens:
-        """Request OAuth tokens."""
         url = f"{self.base_url}{AUTH_REQ_ENDPOINT}"
         data = {
             "client_id": DEFAULT_CLIENT_ID,
@@ -180,28 +169,25 @@ class VeluxActiveAuth(AbstractAsyncAuth):
             self._raise_for_auth_response(response.status, raw)
 
         if not isinstance(raw, dict) or "access_token" not in raw:
-            msg = f"Unexpected token response from {url}"
-            raise VeluxActiveCannotConnect(msg)
+            raise VeluxActiveCannotConnect("Unexpected token response")
 
         issued_at = int(time.time())
         expires_in = raw.get("expires_in", raw.get("expire_in"))
-        expires_at = (
-            issued_at + int(expires_in) if expires_in is not None else None
-        )
-        new_tokens = OAuthTokens(
+        expires_at = issued_at + int(expires_in) if expires_in is not None else None
+
+        tokens = OAuthTokens(
             access_token=str(raw["access_token"]),
-            refresh_token=(
-                str(raw["refresh_token"]) if raw.get("refresh_token") else None
-            ),
+            refresh_token=str(raw["refresh_token"]) if raw.get("refresh_token") else None,
             expires_at=expires_at,
         )
-        self._tokens = new_tokens
+
+        self._tokens = tokens
         if self._token_updated:
-            self._token_updated(new_tokens)
-        return self._tokens
+            self._token_updated(tokens)
+
+        return tokens
 
     def _raise_for_auth_response(self, status: int, raw: Any) -> None:
-        """Raise a typed exception for an auth response."""
         error = ""
         if isinstance(raw, dict):
             error = str(raw.get("error") or raw.get("message") or "")
@@ -212,9 +198,22 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         raise VeluxActiveCannotConnect(error or f"Authentication failed with {status}")
 
 
-class VeluxActiveClient:
-    """Thin client combining the VELUX auth flow with pyatmo."""
+def _is_cover_module(module: Any) -> bool:
+    """Return True for any module that supports position control.
 
+    NXO covers both roller shutters and roof windows in the Velux API.
+    We also duck-type check so that if pyatmo introduces a separate window
+    class it is picked up automatically without a code change.
+    """
+    if isinstance(module, NXO):
+        return True
+    return (
+        hasattr(module, "current_position")
+        and hasattr(module, "async_set_target_position")
+    )
+
+
+class VeluxActiveClient:
     def __init__(
         self,
         websession: aiohttp.ClientSession,
@@ -224,7 +223,6 @@ class VeluxActiveClient:
         initial_tokens: OAuthTokens | None = None,
         token_updated: Callable[[OAuthTokens], None] | None = None,
     ) -> None:
-        """Initialize the client."""
         self._auth = VeluxActiveAuth(
             websession,
             username=username,
@@ -236,23 +234,33 @@ class VeluxActiveClient:
         self._username = username
 
     async def async_validate(self) -> str:
-        """Validate credentials and return basic account info."""
         data = await self.async_update()
         home_names = [home.name for home in data.homes.values()]
         return home_names[0] if len(home_names) == 1 else self._username
 
-    async def async_update(self) -> VeluxActiveData:
-        """Refresh topology and current status."""
+    async def async_setup(self) -> None:
+        """Fetch topology once at startup. Called once — homesdata is expensive."""
         await self._account.async_update_topology()
+
+    async def async_update(self) -> VeluxActiveData:
+        """Fetch current device status only. Topology is loaded once at startup."""
         for home_id in list(self._account.homes):
-            await self._account.async_update_status(home_id)
+            try:
+                await self._account.async_update_status(home_id)
+            except Exception as err:
+                _LOGGER.debug("Skipping home %s: %s", home_id, err)
 
         covers = {
             module_id: module
             for home in self._account.homes.values()
             for module_id, module in home.modules.items()
-            if isinstance(module, NXO)
+            if _is_cover_module(module)
         }
+
+        _LOGGER.debug(
+            "Cover modules found: %s",
+            {mid: type(m).__name__ for mid, m in covers.items()},
+        )
 
         return VeluxActiveData(
             user=self._account.user,
@@ -262,5 +270,4 @@ class VeluxActiveClient:
 
     @property
     def tokens(self) -> OAuthTokens | None:
-        """Return the latest OAuth token set."""
         return self._auth.tokens
