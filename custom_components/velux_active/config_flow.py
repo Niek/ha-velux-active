@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import logging
 from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -17,10 +18,19 @@ from .api import (
     VeluxActiveClient,
     VeluxActiveInvalidAuth,
 )
-from .const import DOMAIN
+from .const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID, DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}
+)
+
+STEP_KEYS_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_HASH_SIGN_KEY, default=""): str,
+        vol.Optional(CONF_SIGN_KEY_ID, default=""): str,
+    }
 )
 
 
@@ -29,7 +39,13 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    def async_get_options_flow(config_entry: ConfigEntry) -> VeluxActiveOptionsFlow:
+        """Return the options flow handler."""
+        return VeluxActiveOptionsFlow()
+
     _username: str
+    _entry_data: dict[str, Any]
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -46,19 +62,41 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             except VeluxActiveCannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
+                _LOGGER.exception("Unexpected error during Velux Active config flow")
                 errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(user_input[CONF_USERNAME].lower())
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=title,
-                    data={**user_input, **tokens.as_storage_dict()},
-                )
+                self._username = title
+                self._entry_data = {**user_input, **tokens.as_storage_dict()}
+                return await self.async_step_keys()
 
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
+        )
+
+    async def async_step_keys(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle optional roof-window signing keys."""
+        if user_input is not None:
+            self._entry_data[CONF_HASH_SIGN_KEY] = user_input.get(
+                CONF_HASH_SIGN_KEY, ""
+            ).strip()
+            self._entry_data[CONF_SIGN_KEY_ID] = user_input.get(
+                CONF_SIGN_KEY_ID, ""
+            ).strip()
+            return self.async_create_entry(
+                title=self._username,
+                data=self._entry_data,
+            )
+
+        return self.async_show_form(
+            step_id="keys",
+            data_schema=STEP_KEYS_DATA_SCHEMA,
+            description_placeholders={},
         )
 
     async def async_step_reauth(
@@ -87,6 +125,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             except VeluxActiveCannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
+                _LOGGER.exception("Unexpected error during Velux Active reauth")
                 errors["base"] = "unknown"
             else:
                 return self.async_update_reload_and_abort(
@@ -119,3 +158,38 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             msg = "VELUX ACTIVE login did not return OAuth tokens"
             raise VeluxActiveCannotConnect(msg)
         return info, tokens
+
+
+class VeluxActiveOptionsFlow(OptionsFlow):
+    """Handle options for an existing Velux Active config entry."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the options step."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_HASH_SIGN_KEY: user_input.get(CONF_HASH_SIGN_KEY, "").strip(),
+                    CONF_SIGN_KEY_ID: user_input.get(CONF_SIGN_KEY_ID, "").strip(),
+                },
+            )
+
+        current_key = self.config_entry.options.get(
+            CONF_HASH_SIGN_KEY,
+            self.config_entry.data.get(CONF_HASH_SIGN_KEY, ""),
+        )
+        current_id = self.config_entry.options.get(
+            CONF_SIGN_KEY_ID,
+            self.config_entry.data.get(CONF_SIGN_KEY_ID, ""),
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_HASH_SIGN_KEY, default=current_key): str,
+                    vol.Optional(CONF_SIGN_KEY_ID, default=current_id): str,
+                }
+            ),
+        )
