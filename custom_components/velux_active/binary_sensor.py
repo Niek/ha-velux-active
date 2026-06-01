@@ -31,7 +31,7 @@ async def async_setup_entry(
 class VeluxActiveRainSensor(VeluxActiveGatewayEntity, BinarySensorEntity):
     """Rain sensor derived from the is_raining attribute of the NXG gateway."""
 
-    _attr_device_class = BinarySensorDeviceClass.RAIN
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
     _attr_name = "Rain"
 
     def __init__(
