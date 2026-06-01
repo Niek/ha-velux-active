@@ -12,7 +12,7 @@ from pyatmo.account import AsyncAccount
 from pyatmo.auth import AbstractAsyncAuth
 from pyatmo.const import AUTH_REQ_ENDPOINT
 from pyatmo.home import Home
-from pyatmo.modules import NXO
+from pyatmo.modules import NXG, NXO
 
 from .const import (
     CONF_ACCESS_TOKEN,
@@ -80,6 +80,7 @@ class VeluxActiveData:
     user: str | None
     homes: dict[str, Home]
     covers: dict[str, NXO]
+    gateways: dict[str, NXG]
 
 
 class VeluxActiveAuth(AbstractAsyncAuth):
@@ -253,11 +254,18 @@ class VeluxActiveClient:
             for module_id, module in home.modules.items()
             if isinstance(module, NXO)
         }
+        gateways = {
+            module_id: module
+            for home in self._account.homes.values()
+            for module_id, module in home.modules.items()
+            if isinstance(module, NXG)
+        }
 
         return VeluxActiveData(
             user=self._account.user,
             homes=dict(self._account.homes),
             covers=covers,
+            gateways=gateways,
         )
 
     @property

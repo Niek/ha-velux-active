@@ -42,3 +42,36 @@ class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
             name=self.module.name,
             sw_version=str(getattr(self.module, "firmware_revision", "")) or None,
         )
+
+
+class VeluxActiveGatewayEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
+    """Shared entity helpers for VELUX ACTIVE gateway devices."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: VeluxActiveDataUpdateCoordinator,
+        module_id: str,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(coordinator)
+        self._module_id = module_id
+
+    @property
+    def module(self):
+        """Return the current pyatmo NXG gateway module."""
+        return self.coordinator.data.gateways[self._module_id]
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info for the gateway."""
+        model = (getattr(self.module, "velux_type", None) or "gateway").replace("_", " ").title()
+        return DeviceInfo(
+            configuration_url=CONTROL_URL,
+            identifiers={(DOMAIN, self.module.entity_id)},
+            manufacturer=MANUFACTURER,
+            model=model,
+            name=self.module.name,
+            sw_version=str(getattr(self.module, "firmware_revision", "")) or None,
+        )
