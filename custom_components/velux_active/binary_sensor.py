@@ -43,7 +43,6 @@ class VeluxActiveCoverRainSensor(VeluxActiveEntity, BinarySensorEntity):
     """Rain sensor shown under each cover device, reading from the NXG gateway."""
 
     _attr_device_class = BinarySensorDeviceClass.MOISTURE
-    _attr_name = "Rain"
 
     def __init__(
         self,
@@ -55,6 +54,7 @@ class VeluxActiveCoverRainSensor(VeluxActiveEntity, BinarySensorEntity):
         super().__init__(coordinator, module_id)
         self._gateway_id = gateway_id
         self._attr_unique_id = f"{module_id}_rain"
+        self._attr_name = "Rain"  # must come after super().__init__ which resets to None
 
     @property
     def is_on(self) -> bool | None:
