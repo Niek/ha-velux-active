@@ -1,4 +1,4 @@
-"""Binary sensor platform for Velux Active - rain detection via NXG gateway."""
+"""Binary sensor platform for Velux Active - rain detection per cover."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import VeluxActiveDataUpdateCoordinator
-from .entity import VeluxActiveGatewayEntity
+from .entity import VeluxActiveEntity
 
 
 async def async_setup_entry(
@@ -19,17 +19,28 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Velux Active binary sensors from a config entry."""
+    """Set up one rain sensor per cover, sourced from the home's gateway."""
     coordinator: VeluxActiveDataUpdateCoordinator = entry.runtime_data
+
+    gateway_id = next(
+        (
+            gid
+            for gid, gw in coordinator.data.gateways.items()
+            if getattr(gw, "is_raining", None) is not None
+        ),
+        None,
+    )
+    if gateway_id is None:
+        return
+
     async_add_entities(
-        VeluxActiveRainSensor(coordinator, module_id)
-        for module_id, module in coordinator.data.gateways.items()
-        if getattr(module, "is_raining", None) is not None
+        VeluxActiveCoverRainSensor(coordinator, module_id, gateway_id)
+        for module_id in coordinator.data.covers
     )
 
 
-class VeluxActiveRainSensor(VeluxActiveGatewayEntity, BinarySensorEntity):
-    """Rain sensor derived from the is_raining attribute of the NXG gateway."""
+class VeluxActiveCoverRainSensor(VeluxActiveEntity, BinarySensorEntity):
+    """Rain sensor shown under each cover device, reading from the NXG gateway."""
 
     _attr_device_class = BinarySensorDeviceClass.MOISTURE
     _attr_name = "Rain"
@@ -38,12 +49,15 @@ class VeluxActiveRainSensor(VeluxActiveGatewayEntity, BinarySensorEntity):
         self,
         coordinator: VeluxActiveDataUpdateCoordinator,
         module_id: str,
+        gateway_id: str,
     ) -> None:
         """Initialize the rain sensor."""
         super().__init__(coordinator, module_id)
+        self._gateway_id = gateway_id
         self._attr_unique_id = f"{module_id}_rain"
 
     @property
     def is_on(self) -> bool | None:
-        """Return True if it is currently raining."""
-        return self.module.is_raining
+        """Return True if the gateway reports rain."""
+        gateway = self.coordinator.data.gateways.get(self._gateway_id)
+        return gateway.is_raining if gateway is not None else None
