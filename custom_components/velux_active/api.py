@@ -11,6 +11,7 @@ import aiohttp
 from pyatmo.account import AsyncAccount
 from pyatmo.auth import AbstractAsyncAuth
 from pyatmo.const import AUTH_REQ_ENDPOINT
+from pyatmo.enums import ScheduleType
 from pyatmo.home import Home
 from pyatmo.modules import NXO
 
@@ -19,6 +20,9 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRES_AT,
 )
+
+# Work around pyatmo 9.4.0 until https://github.com/jabesq-org/pyatmo/pull/564 is released.
+ScheduleType._value2member_map_.setdefault("algo", ScheduleType.AUTO)
 
 DEFAULT_CLIENT_ID = "5931426da127d981e76bdd3f"
 DEFAULT_CLIENT_SECRET = "6ae2d89d15e767ae5c56b456b452d319"
