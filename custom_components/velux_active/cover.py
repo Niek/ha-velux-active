@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import LOGGER
 from .coordinator import VeluxActiveConfigEntry
 from .entity import VeluxActiveEntity
 
@@ -145,10 +146,39 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         target_position: int | None = None,
     ) -> None:
         """Run a pyatmo command and refresh coordinator data."""
+        module = self.module
         try:
-            await command(*args)
+            accepted = await command(*args)
         except ApiError as err:
             raise HomeAssistantError(str(err)) from err
+        if accepted is False:
+            gateway = module.home.modules.get(module.bridge) if module.bridge else None
+            LOGGER.warning(
+                (
+                    "VELUX Active cover command was not accepted: command=%s "
+                    "module_id=%s name=%s bridge=%s velux_type=%s "
+                    "current_position=%s target_position=%s requested_position=%s "
+                    "reachable=%s mode=%s gateway_locked=%s gateway_secure=%s "
+                    "gateway_busy=%s gateway_calibrating=%s gateway_is_raining=%s "
+                    "gateway_pincode_enabled=%s"
+                ),
+                getattr(command, "__name__", type(command).__name__),
+                module.entity_id,
+                module.name,
+                module.bridge,
+                getattr(module, "velux_type", None),
+                module.current_position,
+                module.target_position,
+                target_position,
+                module.reachable,
+                getattr(module, "mode", None),
+                getattr(gateway, "locked", None),
+                getattr(gateway, "secure", None),
+                getattr(gateway, "busy", None),
+                getattr(gateway, "calibrating", None),
+                getattr(gateway, "is_raining", None),
+                getattr(gateway, "pincode_enabled", None),
+            )
         self._set_motion_state(target_position)
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
