@@ -22,15 +22,18 @@ async def async_setup_entry(
     coordinator: VeluxActiveDataUpdateCoordinator = entry.runtime_data
     async_add_entities(
         VeluxActiveRainSensor(coordinator, gateway_id)
-        for gateway_id, gateway in coordinator.data.gateways.items()
-        if getattr(gateway, "is_raining", None) is not None
+        for gateway_id in coordinator.data.gateways
     )
 
 
 class VeluxActiveRainSensor(VeluxActiveGatewayEntity, BinarySensorEntity):
-    """Rain sensor sourced from the NXG gateway's is_raining attribute."""
+    """Rain sensor sourced from the NXG gateway's is_raining attribute.
+
+    Disabled by default: enable manually if the gateway has a connected rain sensor.
+    """
 
     _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
