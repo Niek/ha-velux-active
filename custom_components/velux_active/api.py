@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from json import JSONDecodeError
 import time
 from typing import Any, Callable
 
 import aiohttp
 from pyatmo.account import AsyncAccount
 from pyatmo.auth import AbstractAsyncAuth
-from pyatmo.const import AUTH_REQ_ENDPOINT
+from pyatmo.const import AUTH_REQ_ENDPOINT, SETSTATE_ENDPOINT
 from pyatmo.enums import ScheduleType
 from pyatmo.home import Home
 from pyatmo.modules import NXO
@@ -19,6 +20,7 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRES_AT,
+    LOGGER,
 )
 
 # Work around pyatmo 9.4.0 until https://github.com/jabesq-org/pyatmo/pull/564 is released.
@@ -147,6 +149,33 @@ class VeluxActiveAuth(AbstractAsyncAuth):
                 "refresh_token": self._tokens.refresh_token,
             }
         )
+
+    async def process_response(
+        self,
+        response: aiohttp.ClientResponse,
+        url: str,
+    ) -> aiohttp.ClientResponse:
+        """Process API responses and log setstate body errors."""
+        response = await super().process_response(response, url)
+        if not url.endswith(SETSTATE_ENDPOINT):
+            return response
+
+        try:
+            raw: Any = await response.json(content_type=None)
+        except (aiohttp.ContentTypeError, JSONDecodeError):
+            return response
+
+        body = raw.get("body") if isinstance(raw, dict) else None
+        errors = body.get("errors") if isinstance(body, dict) else None
+        if errors:
+            LOGGER.warning(
+                "VELUX Active setstate response returned API errors: "
+                "api_errors=%s api_response=%s",
+                errors,
+                raw,
+            )
+
+        return response
 
     def _is_token_valid(self, tokens: OAuthTokens) -> bool:
         """Return whether the current token is still valid."""
