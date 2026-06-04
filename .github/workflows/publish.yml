@@ -86,11 +86,33 @@ jobs:
           echo "tag=$next_tag" >> "$GITHUB_OUTPUT"
           echo "create=true" >> "$GITHUB_OUTPUT"
 
+      - name: Update manifest version
+        if: steps.version.outputs.create == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.tag }}"
+          version="${version#v}"
+
+          tmp_file="$(mktemp)"
+          jq --arg version "$version" '.version = $version' \
+            custom_components/velux_active/manifest.json > "$tmp_file"
+          mv "$tmp_file" custom_components/velux_active/manifest.json
+
+      - name: Commit manifest version
+        id: manifest_commit
+        if: steps.version.outputs.create == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "chore: bump manifest version to ${{ steps.version.outputs.tag }}"
+          file_pattern: custom_components/velux_active/manifest.json
+
       - name: Create GitHub release
         if: steps.version.outputs.create == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ steps.manifest_commit.outputs.commit_hash || github.sha }}
           name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
