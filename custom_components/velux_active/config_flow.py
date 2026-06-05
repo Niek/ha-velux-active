@@ -17,7 +17,7 @@ from .api import (
     VeluxActiveClient,
     VeluxActiveInvalidAuth,
 )
-from .const import DOMAIN
+from .const import DOMAIN, LOGGER
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}
@@ -46,6 +46,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             except VeluxActiveCannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
+                LOGGER.exception("Unexpected error validating Velux Active account")
                 errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(user_input[CONF_USERNAME].lower())
@@ -87,6 +88,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             except VeluxActiveCannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
+                LOGGER.exception("Unexpected error reauthenticating Velux Active account")
                 errors["base"] = "unknown"
             else:
                 return self.async_update_reload_and_abort(
