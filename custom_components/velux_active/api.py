@@ -13,6 +13,7 @@ from pyatmo.account import AsyncAccount
 from pyatmo.auth import AbstractAsyncAuth
 from pyatmo.const import AUTH_REQ_ENDPOINT, SETSTATE_ENDPOINT
 from pyatmo.enums import ScheduleType
+from pyatmo.exceptions import NoDeviceError
 from pyatmo.home import Home
 from pyatmo.modules import NXO
 
@@ -277,8 +278,39 @@ class VeluxActiveClient:
     async def async_update(self) -> VeluxActiveData:
         """Refresh topology and current status."""
         await self._account.async_update_topology()
-        for home_id in list(self._account.homes):
-            await self._account.async_update_status(home_id)
+        LOGGER.debug(
+            "VELUX Active topology found %d homes: home_ids=%s",
+            len(self._account.homes),
+            sorted(self._account.homes),
+        )
+        for home_id, home in list(self._account.homes.items()):
+            if not home.modules:
+                LOGGER.debug(
+                    "Skipping VELUX Active home without modules: home_id=%s name=%s",
+                    home_id,
+                    home.name,
+                )
+                self._account.homes.pop(home_id, None)
+                continue
+
+            LOGGER.debug(
+                "Requesting VELUX Active home status: home_id=%s name=%s modules=%d",
+                home_id,
+                home.name,
+                len(home.modules),
+            )
+            try:
+                await self._account.async_update_status(home_id)
+            except NoDeviceError as err:
+                LOGGER.warning(
+                    "Keeping VELUX Active home with topology-only data because "
+                    "status data is unavailable: "
+                    "home_id=%s name=%s modules=%d error=%s",
+                    home_id,
+                    home.name,
+                    len(home.modules),
+                    err,
+                )
 
         covers = {
             module_id: module
