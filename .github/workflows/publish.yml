@@ -90,7 +90,7 @@ jobs:
       - name: Generate release notes
         id: release_notes
         if: steps.version.outputs.create == 'true'
-        uses: mikepenz/release-changelog-builder-action@v6.2.3
+        uses: mikepenz/release-changelog-builder-action@v6
         with:
           mode: COMMIT
           fromTag: ${{ steps.version.outputs.previous_tag }}
