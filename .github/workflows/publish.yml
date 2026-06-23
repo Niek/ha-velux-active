@@ -90,44 +90,17 @@ jobs:
       - name: Generate release notes
         id: release_notes
         if: steps.version.outputs.create == 'true'
-        shell: bash
-        env:
-          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          notes_file="$RUNNER_TEMP/release-notes.md"
-          commits_file="$RUNNER_TEMP/release-commits.txt"
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            git log --no-merges --reverse --pretty=format:"- %s (%h)" \
-              "${PREVIOUS_TAG}..${GITHUB_SHA}" > "$commits_file"
-          else
-            git log --no-merges --reverse --max-count=1 --pretty=format:"- %s (%h)" \
-              "$GITHUB_SHA" > "$commits_file"
-          fi
-
-          {
-            echo "## Changes"
-            echo
-
-            if [ ! -s "$commits_file" ]; then
-              echo "- Maintenance release"
-            else
-              cat "$commits_file"
-              echo
-            fi
-
-            echo
-            if [ -n "$PREVIOUS_TAG" ]; then
-              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${RELEASE_TAG}"
-            else
-              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}"
-            fi
-          } > "$notes_file"
-
-          echo "path=$notes_file" >> "$GITHUB_OUTPUT"
+        uses: mikepenz/release-changelog-builder-action@v6.2.3
+        with:
+          mode: COMMIT
+          fromTag: ${{ steps.version.outputs.previous_tag }}
+          toTag: ${{ github.sha }}
+          configurationJson: |
+            {
+              "template": "## Changes\n\n#{{CHANGELOG}}\n\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.version.outputs.previous_tag }}...${{ steps.version.outputs.tag }}",
+              "commit_template": "- #{{TITLE}}",
+              "empty_template": "## Changes\n\n- Maintenance release\n\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.version.outputs.previous_tag }}...${{ steps.version.outputs.tag }}"
+            }
 
       - name: Update manifest version
         if: steps.version.outputs.create == 'true'
@@ -158,4 +131,4 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ steps.manifest_commit.outputs.commit_hash || github.sha }}
           name: ${{ steps.version.outputs.tag }}
-          body_path: ${{ steps.release_notes.outputs.path }}
+          body: ${{ steps.release_notes.outputs.changelog }}
