@@ -11,6 +11,7 @@
     "pyatmo"
   ],
   "requirements": [
+    "cryptography>=42.0.0",
     "pyatmo>=9.4.0"
   ],
   "version": "0.1.11"

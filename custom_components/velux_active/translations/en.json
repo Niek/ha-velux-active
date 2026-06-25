@@ -8,23 +8,90 @@
     "error": {
       "cannot_connect": "Failed to connect to the Velux Active service.",
       "invalid_auth": "Invalid email or password.",
+      "pairing_failed": "Gateway pairing failed. Make sure Home Assistant is on the same network as the gateway. If the gateway LED is flashing, press the gateway button and try the key retrieval step again.",
       "unknown": "Unexpected error."
     },
     "step": {
+      "user": {
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        },
+        "description": "Log in with your Velux Active with Netatmo app details.",
+        "title": "Velux Active with Netatmo"
+      },
+      "keys": {
+        "data": {
+          "hash_sign_key": "Hash Sign Key",
+          "sign_key_id": "Sign Key ID"
+        },
+        "description": "Enter your window signing keys to enable full control of roof windows (open, close, set position, stop). These are optional \u2014 roller shutters and blinds work without them. See the integration documentation for instructions on obtaining your keys.",
+        "title": "Window Signing Keys (optional)"
+      },
+      "pairing_method": {
+        "data": {
+          "pairing_method": "Signing key setup"
+        },
+        "description": "Signing keys enable full roof-window control. Choose whether Home Assistant should pair directly with the gateway or whether you want to enter existing keys manually.",
+        "title": "Window Signing Keys"
+      },
+      "pair": {
+        "data": {
+          "gateway_host": "Gateway IP address or hostname"
+        },
+        "description": "Enter the local IP address or hostname of your VELUX gateway, then press Submit. Home Assistant will ask the VELUX cloud service to put the gateway into pairing mode. Wait for the gateway LED to start flashing before pressing the physical gateway button.",
+        "data_description": {
+          "gateway_host": "Home Assistant must be able to reach this host on TCP port 25050 during pairing."
+        },
+        "title": "Start Gateway Pairing"
+      },
+      "pair_button": {
+        "description": "Now press the physical button on the VELUX gateway while its LED is flashing. Then press Submit here so Home Assistant can retrieve the signing keys from the local gateway.",
+        "title": "Authorize Gateway Pairing"
+      },
       "reauth_confirm": {
         "data": {
           "password": "Password"
         },
         "description": "Update the password for {username}.",
         "title": "Reauthenticate"
-      },
-      "user": {
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "pairing_failed": "Gateway pairing failed. Make sure Home Assistant is on the same network as the gateway. If the gateway LED is flashing, press the gateway button and try the key retrieval step again.",
+      "unknown": "Unexpected error."
+    },
+    "step": {
+      "init": {
         "data": {
-          "password": "Password",
-          "username": "Email"
+          "pairing_method": "Signing key setup"
         },
-        "description": "Log in with your Velux Active with Netatmo app details.",
-        "title": "Velux Active with Netatmo"
+        "description": "Update your window signing keys. These are required for roof window control.",
+        "title": "Update Window Signing Keys"
+      },
+      "keys": {
+        "data": {
+          "hash_sign_key": "Hash Sign Key",
+          "sign_key_id": "Sign Key ID"
+        },
+        "description": "Enter your window signing keys manually. Leave blank to disable window signing.",
+        "title": "Manual Window Signing Keys"
+      },
+      "pair": {
+        "data": {
+          "gateway_host": "Gateway IP address or hostname"
+        },
+        "description": "Enter the local IP address or hostname of your VELUX gateway, then press Submit. Home Assistant will ask the VELUX cloud service to put the gateway into pairing mode. Wait for the gateway LED to start flashing before pressing the physical gateway button.",
+        "data_description": {
+          "gateway_host": "Home Assistant must be able to reach this host on TCP port 25050 during pairing."
+        },
+        "title": "Start Gateway Pairing"
+      },
+      "pair_button": {
+        "description": "Now press the physical button on the VELUX gateway while its LED is flashing. Then press Submit here so Home Assistant can retrieve the signing keys from the local gateway.",
+        "title": "Authorize Gateway Pairing"
       }
     }
   }
