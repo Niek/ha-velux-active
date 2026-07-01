@@ -36,6 +36,7 @@ PAIRING_METHOD_AUTO = "auto"
 PAIRING_METHOD_MANUAL = "manual"
 PAIRING_METHOD_SKIP = "skip"
 FIELD_GATEWAY_HOST = "gateway_host"
+FIELD_GATEWAY = "gateway"
 
 STEP_PAIRING_METHOD_SCHEMA = vol.Schema(
     {
@@ -78,7 +79,10 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
     _username: str
     _client: VeluxActiveClient
     _entry_data: dict[str, Any]
+    _pair_gateway_choices: dict[str, tuple[str, str, str]]
     _pair_gateway_host: str
+    _pair_gateway_id: str
+    _pair_home_id: str
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -118,7 +122,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             method = user_input["pairing_method"]
             if method == PAIRING_METHOD_AUTO:
-                return await self.async_step_pair()
+                return await self.async_step_select_gateway()
             if method == PAIRING_METHOD_MANUAL:
                 return await self.async_step_keys()
 
@@ -131,6 +135,39 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=STEP_PAIRING_METHOD_SCHEMA,
         )
 
+    async def async_step_select_gateway(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Select which gateway should provide signing keys."""
+        errors: dict[str, str] = {}
+
+        if not hasattr(self, "_pair_gateway_choices"):
+            try:
+                self._pair_gateway_choices = _get_gateway_choices(
+                    await self._client.async_get_raw_homesdata()
+                )
+            except (VeluxActiveCannotConnect, VeluxPairingError):
+                errors["base"] = "pairing_failed"
+            except Exception:
+                LOGGER.exception("Unexpected error loading Velux Active gateways")
+                errors["base"] = "unknown"
+
+        if not errors and user_input is not None:
+            self._set_pairing_gateway(user_input[FIELD_GATEWAY])
+            return await self.async_step_pair()
+
+        if not errors and len(self._pair_gateway_choices) == 1:
+            self._set_pairing_gateway(next(iter(self._pair_gateway_choices)))
+            return await self.async_step_pair()
+
+        return self.async_show_form(
+            step_id="select_gateway",
+            data_schema=_gateway_selection_schema(
+                getattr(self, "_pair_gateway_choices", {})
+            ),
+            errors=errors,
+        )
+
     async def async_step_pair(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -141,7 +178,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pair_gateway_host = user_input[FIELD_GATEWAY_HOST].strip()
             try:
                 await self._async_trigger_pairing(self._client)
-            except VeluxPairingError:
+            except (VeluxActiveCannotConnect, VeluxPairingError):
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error starting Velux Active pairing")
@@ -262,12 +299,15 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_trigger_pairing(self, client: VeluxActiveClient) -> None:
         """Trigger gateway key retrieval."""
-        home_id, gateway_id = _find_gateway(await client.async_get_raw_homesdata())
-        await client.async_trigger_retrieve_key(home_id, gateway_id)
+        await client.async_trigger_retrieve_key(self._pair_home_id, self._pair_gateway_id)
 
     async def _async_retrieve_pairing_key(self, host: str):
         """Fetch the key from the local gateway listener."""
         return await self.hass.async_add_executor_job(lambda: retrieve_signing_key(host=host))
+
+    def _set_pairing_gateway(self, choice: str) -> None:
+        """Store selected pairing gateway identifiers."""
+        self._pair_home_id, self._pair_gateway_id, _ = self._pair_gateway_choices[choice]
 
 
 class VeluxActiveOptionsFlow(OptionsFlow):
@@ -278,6 +318,9 @@ class VeluxActiveOptionsFlow(OptionsFlow):
     """
 
     _pair_gateway_host: str
+    _pair_gateway_choices: dict[str, tuple[str, str, str]]
+    _pair_gateway_id: str
+    _pair_home_id: str
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -286,7 +329,7 @@ class VeluxActiveOptionsFlow(OptionsFlow):
         if user_input is not None:
             method = user_input["pairing_method"]
             if method == PAIRING_METHOD_AUTO:
-                return await self.async_step_pair()
+                return await self.async_step_select_gateway()
             if method == PAIRING_METHOD_SKIP:
                 return self.async_create_entry(
                     title="", data={CONF_HASH_SIGN_KEY: "", CONF_SIGN_KEY_ID: ""}
@@ -296,6 +339,46 @@ class VeluxActiveOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=STEP_PAIRING_METHOD_SCHEMA,
+        )
+
+    async def async_step_select_gateway(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Select which gateway should provide signing keys."""
+        errors: dict[str, str] = {}
+        entry_data = self.config_entry.data
+        client = VeluxActiveClient(
+            async_get_clientsession(self.hass),
+            entry_data[CONF_USERNAME],
+            entry_data[CONF_PASSWORD],
+            initial_tokens=OAuthTokens.from_mapping(entry_data),
+        )
+
+        if not hasattr(self, "_pair_gateway_choices"):
+            try:
+                self._pair_gateway_choices = _get_gateway_choices(
+                    await client.async_get_raw_homesdata()
+                )
+            except (VeluxActiveCannotConnect, VeluxPairingError):
+                errors["base"] = "pairing_failed"
+            except Exception:
+                LOGGER.exception("Unexpected error loading Velux Active options gateways")
+                errors["base"] = "unknown"
+
+        if not errors and user_input is not None:
+            self._set_pairing_gateway(user_input[FIELD_GATEWAY])
+            return await self.async_step_pair()
+
+        if not errors and len(self._pair_gateway_choices) == 1:
+            self._set_pairing_gateway(next(iter(self._pair_gateway_choices)))
+            return await self.async_step_pair()
+
+        return self.async_show_form(
+            step_id="select_gateway",
+            data_schema=_gateway_selection_schema(
+                getattr(self, "_pair_gateway_choices", {})
+            ),
+            errors=errors,
         )
 
     async def async_step_pair(
@@ -315,7 +398,7 @@ class VeluxActiveOptionsFlow(OptionsFlow):
             )
             try:
                 await self._async_trigger_pairing(client)
-            except VeluxPairingError:
+            except (VeluxActiveCannotConnect, VeluxPairingError):
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error starting Velux Active options pairing")
@@ -392,19 +475,50 @@ class VeluxActiveOptionsFlow(OptionsFlow):
 
     async def _async_trigger_pairing(self, client: VeluxActiveClient) -> None:
         """Trigger gateway key retrieval."""
-        home_id, gateway_id = _find_gateway(await client.async_get_raw_homesdata())
-        await client.async_trigger_retrieve_key(home_id, gateway_id)
+        await client.async_trigger_retrieve_key(self._pair_home_id, self._pair_gateway_id)
 
     async def _async_retrieve_pairing_key(self, host: str):
         """Fetch the key from the local gateway listener."""
         return await self.hass.async_add_executor_job(lambda: retrieve_signing_key(host=host))
 
+    def _set_pairing_gateway(self, choice: str) -> None:
+        """Store selected pairing gateway identifiers."""
+        self._pair_home_id, self._pair_gateway_id, _ = self._pair_gateway_choices[choice]
 
-def _find_gateway(raw: Mapping[str, Any]) -> tuple[str, str]:
-    """Find the first VELUX gateway in raw homesdata."""
+
+def _get_gateway_choices(raw: Mapping[str, Any]) -> dict[str, tuple[str, str, str]]:
+    """Return available VELUX gateways from raw homesdata."""
+    choices: dict[str, tuple[str, str, str]] = {}
     for home in raw.get("body", {}).get("homes", []):
         home_id = str(home.get("id") or "")
+        home_name = str(home.get("name") or home_id)
         for module in home.get("modules", []):
             if module.get("type") == "NXG":
-                return home_id, str(module.get("id") or "")
-    raise VeluxPairingError("No VELUX gateway found")
+                gateway_id = str(module.get("id") or "")
+                gateway_name = str(module.get("name") or gateway_id)
+                choice = f"{home_id}:{gateway_id}"
+                choices[choice] = (home_id, gateway_id, f"{home_name} / {gateway_name}")
+    if not choices:
+        raise VeluxPairingError("No VELUX gateway found")
+    return choices
+
+
+def _gateway_selection_schema(
+    choices: Mapping[str, tuple[str, str, str]],
+) -> vol.Schema:
+    """Build the gateway selection schema."""
+    if not choices:
+        return vol.Schema({})
+    return vol.Schema(
+        {
+            vol.Required(FIELD_GATEWAY): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=value, label=label)
+                        for value, (_, _, label) in choices.items()
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+        }
+    )

@@ -14,6 +14,20 @@ Do not edit Home Assistant `.storage/core.config_entries` directly. If you alrea
 
 ---
 
+## Standalone Local Retrieval Helper
+
+The repo includes a small helper for exercising the local Netcom key retrieval path outside the Home Assistant UI:
+
+```bash
+python3 dev/retrieve-signing-key.py --host GATEWAY_IP_OR_HOSTNAME
+```
+
+This helper expects the gateway's local retrieve-key listener to already be active. Trigger pairing from Home Assistant or another client first, wait for the gateway LED to flash, press the physical gateway button, then run the helper.
+
+The helper only talks to the local gateway. It does not log in to VELUX/Netatmo and does not trigger cloud `retrieve_key` mode by itself.
+
+---
+
 ## What You Need
 
 - An Android phone connected to the same Wi-Fi as the VELUX gateway.

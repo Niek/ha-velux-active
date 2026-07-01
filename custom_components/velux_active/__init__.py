@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import OAuthTokens, VeluxActiveClient
-from .const import PLATFORMS
+from .const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID, PLATFORMS
 from .coordinator import VeluxActiveDataUpdateCoordinator
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
@@ -19,6 +19,7 @@ async def async_setup_entry(
     entry: VeluxActiveConfigEntry,
 ) -> bool:
     """Set up Velux Active with Netatmo from a config entry."""
+    signing_keys = _entry_signing_keys(entry)
 
     def _handle_tokens(tokens: OAuthTokens) -> None:
         token_data = tokens.as_storage_dict()
@@ -46,18 +47,29 @@ async def async_setup_entry(
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Reload entry when options are updated so new keys take effect
+    async def _async_update_listener(
+        hass: HomeAssistant,
+        updated_entry: VeluxActiveConfigEntry,
+    ) -> None:
+        """Reload only when signing-key options change."""
+        nonlocal signing_keys
+        updated_signing_keys = _entry_signing_keys(updated_entry)
+        if updated_signing_keys == signing_keys:
+            return
+        signing_keys = updated_signing_keys
+        await hass.config_entries.async_reload(updated_entry.entry_id)
+
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
 
 
-async def _async_update_listener(
-    hass: HomeAssistant,
-    entry: VeluxActiveConfigEntry,
-) -> None:
-    """Handle options update — reload the entry so new keys take effect."""
-    await hass.config_entries.async_reload(entry.entry_id)
+def _entry_signing_keys(entry: VeluxActiveConfigEntry) -> tuple[str, str]:
+    """Return signing keys from options if present, otherwise entry data."""
+    return (
+        entry.options.get(CONF_HASH_SIGN_KEY, entry.data.get(CONF_HASH_SIGN_KEY, "")),
+        entry.options.get(CONF_SIGN_KEY_ID, entry.data.get(CONF_SIGN_KEY_ID, "")),
+    )
 
 
 async def async_unload_entry(

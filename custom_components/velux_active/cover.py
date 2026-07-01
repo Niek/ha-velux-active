@@ -369,12 +369,15 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                 return home
         return None
 
-    def _get_bridge_id(self) -> str | None:
-        """Return the NXG gateway module ID."""
-        for home in self.coordinator.client._account.homes.values():
-            for module_id, module in home.modules.items():
-                if type(module).__name__ == "NXG":
-                    return module_id
+    def _get_bridge_id(self, home) -> str | None:
+        """Return the gateway module ID for this module's owning home."""
+        bridge_id = getattr(self.module, "bridge", None)
+        if bridge_id and type(home.modules.get(bridge_id)).__name__ == "NXG":
+            return bridge_id
+
+        for module_id, module in home.modules.items():
+            if type(module).__name__ == "NXG":
+                return module_id
         return None
 
     def _get_timezone(self) -> str:
@@ -385,7 +388,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         raw_position = self._ha_to_raw_position(ha_position)
         if self._is_window_device and self._signing_enabled:
             home = self._get_home()
-            bridge_id = self._get_bridge_id()
+            bridge_id = self._get_bridge_id(home) if home is not None else None
             if home is None or bridge_id is None:
                 raise HomeAssistantError(
                     "Could not find home or gateway for signed window command"
@@ -421,7 +424,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         movements immediately.
         """
         home = self._get_home()
-        bridge_id = self._get_bridge_id()
+        bridge_id = self._get_bridge_id(home) if home is not None else None
         if home is None or bridge_id is None:
             raise HomeAssistantError(
                 "Could not find home or gateway for stop command"
@@ -447,9 +450,17 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                 "Content-Type": "application/json",
             },
         ) as response:
-            result = await response.json(content_type=None)
+            text = await response.text()
+            if not text.strip():
+                raise HomeAssistantError(
+                    f"Stop command returned empty response (status {response.status})"
+                )
+            result = json.loads(text)
             if not response.ok:
                 raise HomeAssistantError(f"Stop command failed: {result}")
+            api_errors = result.get("body", {}).get("errors", [])
+            if api_errors:
+                raise HomeAssistantError(f"Stop command errors: {api_errors}")
 
         self._motion_state = None
         self._motion_target_position = None
@@ -458,6 +469,11 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         await self.coordinator.async_request_refresh()
 
     def _motion_direction(self) -> str | None:
+        current = self.module.current_position
+        target = self.module.target_position
+        if current is not None and target is not None and current != target:
+            return "opening" if target > current else "closing"
+
         current = self.current_cover_position
         target = self._motion_target_position
         if current is not None and target is not None and current != target:
@@ -474,6 +490,14 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         self._motion_target_position = target_position
 
     def _clear_motion_state_if_settled(self) -> None:
+        current = self.module.current_position
+        target = self.module.target_position
+
+        if current is not None and target is not None and current != target:
+            self._motion_state = None
+            self._motion_target_position = None
+            return
+
         current = self.current_cover_position
         if (
             self._motion_target_position is not None

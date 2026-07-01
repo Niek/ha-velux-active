@@ -283,7 +283,7 @@ class VeluxActiveClient:
 
     async def async_trigger_retrieve_key(self, home_id: str, gateway_id: str) -> None:
         """Ask the gateway to open its temporary local key retrieval listener."""
-        await self._auth.async_post_api_request(
+        response = await self._auth.async_post_api_request(
             endpoint=SETSTATE_ENDPOINT,
             params={
                 "json": {
@@ -294,6 +294,20 @@ class VeluxActiveClient:
                 }
             },
         )
+        try:
+            raw: Any = await response.json(content_type=None)
+        except (aiohttp.ContentTypeError, JSONDecodeError) as err:
+            raise VeluxActiveCannotConnect("Unexpected retrieve_key response") from err
+        if not response.ok:
+            raise VeluxActiveCannotConnect(
+                f"VELUX retrieve_key request failed with status {response.status}"
+            )
+        body = raw.get("body") if isinstance(raw, dict) else None
+        errors = body.get("errors") if isinstance(body, dict) else None
+        if errors:
+            raise VeluxActiveCannotConnect(
+                f"VELUX gateway rejected key retrieval: {errors}"
+            )
 
     async def async_reauthenticate(self) -> None:
         """Force a fresh password login and store the new tokens."""
@@ -338,8 +352,6 @@ class VeluxActiveClient:
                     len(home.modules),
                     err,
                 )
-            except Exception as err:
-                LOGGER.debug("Skipping home %s: %s", home_id, err)
 
         covers = {
             module_id: module

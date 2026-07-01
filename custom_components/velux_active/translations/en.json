@@ -35,6 +35,13 @@
         "description": "Signing keys enable full roof-window control. Choose whether Home Assistant should pair directly with the gateway or whether you want to enter existing keys manually.",
         "title": "Window Signing Keys"
       },
+      "select_gateway": {
+        "data": {
+          "gateway": "Gateway"
+        },
+        "description": "Select the VELUX gateway to pair with for roof-window signing keys.",
+        "title": "Select Gateway"
+      },
       "pair": {
         "data": {
           "gateway_host": "Gateway IP address or hostname"
@@ -78,6 +85,13 @@
         },
         "description": "Enter your window signing keys manually. Leave blank to disable window signing.",
         "title": "Manual Window Signing Keys"
+      },
+      "select_gateway": {
+        "data": {
+          "gateway": "Gateway"
+        },
+        "description": "Select the VELUX gateway to pair with for roof-window signing keys.",
+        "title": "Select Gateway"
       },
       "pair": {
         "data": {
