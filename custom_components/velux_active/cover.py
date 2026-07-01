@@ -370,14 +370,24 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         return None
 
     def _get_bridge_id(self, home) -> str | None:
-        """Return the gateway module ID for this module's owning home."""
+        """Return the gateway module ID for this module's owning home.
+
+        Prefer the module's own ``bridge`` link so accounts with multiple
+        gateways route commands to the correct one. Only fall back to a
+        home-wide lookup when that home has exactly one gateway, so we never
+        guess between several.
+        """
         bridge_id = getattr(self.module, "bridge", None)
         if bridge_id and type(home.modules.get(bridge_id)).__name__ == "NXG":
             return bridge_id
 
-        for module_id, module in home.modules.items():
-            if type(module).__name__ == "NXG":
-                return module_id
+        gateways = [
+            module_id
+            for module_id, module in home.modules.items()
+            if type(module).__name__ == "NXG"
+        ]
+        if len(gateways) == 1:
+            return gateways[0]
         return None
 
     def _get_timezone(self) -> str:
