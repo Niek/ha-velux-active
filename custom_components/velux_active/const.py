@@ -15,6 +15,9 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_TOKEN_EXPIRES_AT = "token_expires_at"
 CONF_HASH_SIGN_KEY = "hash_sign_key"
 CONF_SIGN_KEY_ID = "sign_key_id"
+# Gateway the single stored key was paired with. Signed commands are refused
+# for windows on any other gateway. Empty for manual/legacy keys (no check).
+CONF_SIGN_KEY_GATEWAY_ID = "sign_key_gateway_id"
 PLATFORMS = [Platform.COVER]
 UPDATE_INTERVAL = timedelta(seconds=30)
 

@@ -18,7 +18,13 @@ from .api import (
     VeluxActiveClient,
     VeluxActiveInvalidAuth,
 )
-from .const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID, DOMAIN, LOGGER
+from .const import (
+    CONF_HASH_SIGN_KEY,
+    CONF_SIGN_KEY_GATEWAY_ID,
+    CONF_SIGN_KEY_ID,
+    DOMAIN,
+    LOGGER,
+)
 from .pairing import VeluxPairingError, retrieve_signing_key
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
@@ -209,6 +215,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 self._entry_data[CONF_HASH_SIGN_KEY] = signing_key.hash_sign_key
                 self._entry_data[CONF_SIGN_KEY_ID] = signing_key.sign_key_id
+                self._entry_data[CONF_SIGN_KEY_GATEWAY_ID] = self._pair_gateway_id
                 return self.async_create_entry(title=self._username, data=self._entry_data)
 
         return self.async_show_form(
@@ -229,6 +236,7 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._entry_data[CONF_HASH_SIGN_KEY] = user_input.get(CONF_HASH_SIGN_KEY, "").strip()
             self._entry_data[CONF_SIGN_KEY_ID] = user_input.get(CONF_SIGN_KEY_ID, "").strip()
+            self._entry_data[CONF_SIGN_KEY_GATEWAY_ID] = ""
             return self.async_create_entry(title=self._username, data=self._entry_data)
 
         return self.async_show_form(
@@ -432,6 +440,7 @@ class VeluxActiveOptionsFlow(OptionsFlow):
                     data={
                         CONF_HASH_SIGN_KEY: signing_key.hash_sign_key,
                         CONF_SIGN_KEY_ID: signing_key.sign_key_id,
+                        CONF_SIGN_KEY_GATEWAY_ID: self._pair_gateway_id,
                     },
                 )
 
@@ -451,6 +460,7 @@ class VeluxActiveOptionsFlow(OptionsFlow):
                 data={
                     CONF_HASH_SIGN_KEY: user_input.get(CONF_HASH_SIGN_KEY, "").strip(),
                     CONF_SIGN_KEY_ID: user_input.get(CONF_SIGN_KEY_ID, "").strip(),
+                    CONF_SIGN_KEY_GATEWAY_ID: "",
                 },
             )
 

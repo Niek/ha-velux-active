@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
-import hmac
 import json
 import logging
 import time
@@ -27,6 +24,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     CONF_HASH_SIGN_KEY,
+    CONF_SIGN_KEY_GATEWAY_ID,
     CONF_SIGN_KEY_ID,
     VELUX_API_URL,
     VELUX_APP_TYPE,
@@ -34,6 +32,7 @@ from .const import (
 )
 from .coordinator import VeluxActiveConfigEntry
 from .entity import VeluxActiveEntity
+from .signing import allocate_nonces, compute_hash
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,38 +69,6 @@ def _module_is_window(module_id: str, module: Any) -> bool:
     return any(kw in name.lower() for kw in _WINDOW_NAME_KEYWORDS)
 
 
-def _decode_hash_sign_key(hash_sign_key_b64: str) -> bytes:
-    """Decode a Hash Sign Key in standard or URL-safe Base64 form."""
-    value = hash_sign_key_b64.strip().replace("-", "+").replace("_", "/")
-    value += "=" * (-len(value) % 4)
-    return base64.b64decode(value, validate=True)
-
-
-def _compute_hash(
-    hash_sign_key_b64: str,
-    position: int,
-    timestamp: int,
-    nonce: int,
-    device_id: str,
-) -> str:
-    """Compute the HMAC-SHA512 hash required to sign a window position command.
-
-    The Velux API requires signed commands for roof windows as a security
-    measure (windows are openings in the roof). The signature proves the
-    command originated from a paired device.
-
-    Formula:
-        msg  = f"target_position{position}{timestamp}{nonce}{device_id}"
-        hash = HMAC-SHA512(key=base64decode(HashSignKey), msg=msg)
-        result = base64encode(hash).replace('+', '-').replace('/', '_')
-    """
-    string_to_hash = f"target_position{position}{timestamp}{nonce}{device_id}"
-    key = _decode_hash_sign_key(hash_sign_key_b64)
-    digest = hmac.new(key, string_to_hash.encode("utf-8"), hashlib.sha512).digest()
-    result = base64.b64encode(digest).decode("utf-8")
-    return result.replace("+", "-").replace("/", "_")
-
-
 # ---------------------------------------------------------------------------
 # Batch command manager
 # ---------------------------------------------------------------------------
@@ -129,6 +96,10 @@ class _BatchCommandManager:
         self._hash_sign_key: str = ""
         self._sign_key_id: str = ""
         self._timezone: str = "UTC"
+        # Carry nonce state across batches so two sends in the same second do
+        # not reuse (timestamp, nonce) and hit the API's replay rejection.
+        self._last_ts: int = 0
+        self._last_nonce: int = -1
 
     def setup(
         self,
@@ -160,9 +131,11 @@ class _BatchCommandManager:
         return future
 
     async def _fire_after_delay(self) -> None:
-        """Wait briefly for more commands to arrive, then send them all at once."""
-        await asyncio.sleep(0.15)
-        await self._send_batch()
+        """Wait briefly for more commands, then send. Loop so commands queued
+        while a send is in flight are not stranded with an unresolved future."""
+        while self._pending:
+            await asyncio.sleep(0.15)
+            await self._send_batch()
 
     async def _send_batch(self) -> None:
         if not self._pending:
@@ -176,7 +149,10 @@ class _BatchCommandManager:
         commands = list(seen.values())
         self._pending.clear()
 
-        timestamp = int(time.time())
+        timestamp, base_nonce = allocate_nonces(
+            int(time.time()), self._last_ts, self._last_nonce
+        )
+
         access_token = await self._access_token_getter()
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -184,8 +160,9 @@ class _BatchCommandManager:
         }
 
         modules = []
-        for nonce, cmd in enumerate(commands):
-            position_hash = _compute_hash(
+        for offset, cmd in enumerate(commands):
+            nonce = base_nonce + offset
+            position_hash = compute_hash(
                 self._hash_sign_key,
                 cmd["position"],
                 timestamp,
@@ -201,6 +178,8 @@ class _BatchCommandManager:
                 "hash_target_position": position_hash,
                 "timestamp": timestamp,
             })
+        self._last_ts = timestamp
+        self._last_nonce = base_nonce + len(commands) - 1
 
         payload = {
             "app_type": VELUX_APP_TYPE,
@@ -292,6 +271,9 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         entry_data = coordinator.config_entry.data
         self._hash_sign_key: str = entry_data.get(CONF_HASH_SIGN_KEY, "").strip()
         self._sign_key_id: str = entry_data.get(CONF_SIGN_KEY_ID, "").strip()
+        self._sign_key_gateway_id: str = entry_data.get(
+            CONF_SIGN_KEY_GATEWAY_ID, ""
+        ).strip()
         self._signing_enabled: bool = bool(self._hash_sign_key and self._sign_key_id)
 
         _LOGGER.debug(
@@ -402,6 +384,14 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
             if home is None or bridge_id is None:
                 raise HomeAssistantError(
                     "Could not find home or gateway for signed window command"
+                )
+            # Only one gateway's key is stored; refuse windows on another gateway
+            # rather than sign (and batch) them with the wrong key.
+            if self._sign_key_gateway_id and bridge_id != self._sign_key_gateway_id:
+                raise HomeAssistantError(
+                    f"Window is on gateway {bridge_id}, but signing keys were "
+                    f"paired with gateway {self._sign_key_gateway_id}. Re-pair "
+                    "with this window's gateway to control it."
                 )
 
             batch = _get_batch_manager(self.coordinator.config_entry.entry_id)
