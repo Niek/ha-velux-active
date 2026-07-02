@@ -27,8 +27,8 @@ class BatchCommandManager:
     When HA calls open_cover on a group, it calls each entity's open_cover
     sequentially. We collect all commands that arrive within a short window
     (150 ms) and send them in one request with incrementing nonces, matching
-    the official Velux app. The API rejects a reused (timestamp, nonce) pair
-    with error code 28, so nonce state is carried across batches.
+    the official Velux app. The API rejects a reused (timestamp, nonce) pair,
+    so nonce state is carried across batches.
     """
 
     def __init__(self) -> None:
