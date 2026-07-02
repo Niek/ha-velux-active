@@ -8,7 +8,13 @@ sys.path.insert(
     0, str(Path(__file__).resolve().parents[1] / "custom_components" / "velux_active")
 )
 
-from signing import allocate_nonces, compute_hash  # noqa: E402
+from signing import (  # noqa: E402
+    allocate_nonces,
+    build_signed_modules,
+    compute_hash,
+    resolve_bridge_id,
+    retrieve_key_error,
+)
 
 KEY = "AAAAAAAAAAAAAAAAAAAAAA=="  # 16 zero bytes, base64
 
@@ -53,6 +59,34 @@ def test_hash_changes_with_each_signed_field():
     assert compute_hash(KEY, 100, 99999, 0, "dev1") != base  # timestamp
     assert compute_hash(KEY, 100, 12345, 1, "dev1") != base  # nonce
     assert compute_hash(KEY, 100, 12345, 0, "dev2") != base  # device
+
+
+def test_resolve_bridge_prefers_module_link():
+    assert resolve_bridge_id("gwA", ["gwA", "gwB"]) == "gwA"
+
+
+def test_resolve_bridge_falls_back_only_when_unambiguous():
+    assert resolve_bridge_id(None, ["gwA"]) == "gwA"        # single gateway
+    assert resolve_bridge_id(None, ["gwA", "gwB"]) is None  # never guess
+    assert resolve_bridge_id("stale", ["gwA", "gwB"]) is None
+    assert resolve_bridge_id(None, []) is None
+
+
+def test_build_signed_modules_assigns_sequential_nonces_and_signs():
+    cmds = [{"id": "m1", "position": 100}, {"id": "m2", "position": 50}]
+    mods = build_signed_modules(cmds, 12345, 3, "bridgeX", "kid", KEY)
+    assert [m["nonce"] for m in mods] == [3, 4]
+    assert [m["bridge"] for m in mods] == ["bridgeX", "bridgeX"]
+    assert mods[0]["sign_key_id"] == "kid"
+    assert mods[0]["target_position"] == 100
+    assert mods[0]["hash_target_position"] == compute_hash(KEY, 100, 12345, 3, "m1")
+
+
+def test_retrieve_key_error_flags_http_and_body_errors():
+    assert retrieve_key_error(True, 200, {"body": {}}) is None
+    assert retrieve_key_error(False, 500, {}) is not None            # HTTP failure
+    assert retrieve_key_error(True, 200, {"body": {"errors": [1]}})  # 200 + body.errors
+    assert retrieve_key_error(True, 200, "garbage") is None
 
 
 if __name__ == "__main__":

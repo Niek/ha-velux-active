@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 
-from homeassistant.const import Platform
-
 DOMAIN = "velux_active"
 MANUFACTURER = "VELUX"
 CONTROL_URL = "https://home.netatmo.com/control"
@@ -18,7 +16,6 @@ CONF_SIGN_KEY_ID = "sign_key_id"
 # Gateway the single stored key was paired with. Signed commands are refused
 # for windows on any other gateway. Empty for manual/legacy keys (no check).
 CONF_SIGN_KEY_GATEWAY_ID = "sign_key_gateway_id"
-PLATFORMS = [Platform.COVER]
 UPDATE_INTERVAL = timedelta(seconds=30)
 
 VELUX_API_URL = "https://app.velux-active.com"

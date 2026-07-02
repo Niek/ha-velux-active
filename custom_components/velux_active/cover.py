@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import time
 from collections.abc import Callable
 from typing import Any
 
@@ -30,9 +28,10 @@ from .const import (
     VELUX_APP_TYPE,
     VELUX_APP_VERSION,
 )
+from .batch import BatchCommandError, get_batch_manager
 from .coordinator import VeluxActiveConfigEntry
 from .entity import VeluxActiveEntity
-from .signing import allocate_nonces, compute_hash
+from .signing import resolve_bridge_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,178 +66,6 @@ def _module_is_window(module_id: str, module: Any) -> bool:
         return True
     name = getattr(module, "name", "") or ""
     return any(kw in name.lower() for kw in _WINDOW_NAME_KEYWORDS)
-
-
-# ---------------------------------------------------------------------------
-# Batch command manager
-# ---------------------------------------------------------------------------
-
-class _BatchCommandManager:
-    """Collect signed window commands and send them in a single setstate call.
-
-    When HA calls open_cover on a group, it calls each entity's open_cover
-    sequentially. We collect all commands that arrive within a short window
-    (150 ms) and then send them all in one request with incrementing nonces,
-    matching the behaviour of the official Velux app.
-
-    This is important because the Velux API uses the nonce to prevent replay
-    attacks — if two commands share the same timestamp and nonce, the second
-    is rejected with error code 28.
-    """
-
-    def __init__(self) -> None:
-        self._pending: list[dict] = []
-        self._task: asyncio.Task | None = None
-        self._hass = None
-        self._home_id: str | None = None
-        self._bridge_id: str | None = None
-        self._access_token_getter = None
-        self._hash_sign_key: str = ""
-        self._sign_key_id: str = ""
-        self._timezone: str = "UTC"
-        # Carry nonce state across batches so two sends in the same second do
-        # not reuse (timestamp, nonce) and hit the API's replay rejection.
-        self._last_ts: int = 0
-        self._last_nonce: int = -1
-
-    def setup(
-        self,
-        home_id: str,
-        bridge_id: str,
-        hass,
-        access_token_getter,
-        hash_sign_key: str,
-        sign_key_id: str,
-        timezone: str,
-    ) -> None:
-        self._home_id = home_id
-        self._bridge_id = bridge_id
-        self._hass = hass
-        self._access_token_getter = access_token_getter
-        self._hash_sign_key = hash_sign_key
-        self._sign_key_id = sign_key_id
-        self._timezone = timezone
-
-    def queue(self, module_id: str, raw_position: int) -> asyncio.Future:
-        """Queue a window command. Returns a Future resolved when the batch fires."""
-        loop = asyncio.get_running_loop()
-        future: asyncio.Future = loop.create_future()
-        self._pending.append({"id": module_id, "position": raw_position, "future": future})
-
-        if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._fire_after_delay())
-
-        return future
-
-    async def _fire_after_delay(self) -> None:
-        """Wait briefly for more commands, then send. Loop so commands queued
-        while a send is in flight are not stranded with an unresolved future."""
-        while self._pending:
-            await asyncio.sleep(0.15)
-            await self._send_batch()
-
-    async def _send_batch(self) -> None:
-        if not self._pending:
-            return
-
-        # Deduplicate by module ID — keep only the latest command per window
-        # This handles double-tap scenarios where the same window is commanded twice
-        seen: dict[str, dict] = {}
-        for cmd in self._pending:
-            seen[cmd["id"]] = cmd
-        commands = list(seen.values())
-        self._pending.clear()
-
-        timestamp, base_nonce = allocate_nonces(
-            int(time.time()), self._last_ts, self._last_nonce
-        )
-
-        access_token = await self._access_token_getter()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-
-        modules = []
-        for offset, cmd in enumerate(commands):
-            nonce = base_nonce + offset
-            position_hash = compute_hash(
-                self._hash_sign_key,
-                cmd["position"],
-                timestamp,
-                nonce,
-                cmd["id"],
-            )
-            modules.append({
-                "id": cmd["id"],
-                "nonce": nonce,
-                "bridge": self._bridge_id,
-                "sign_key_id": self._sign_key_id,
-                "target_position": cmd["position"],
-                "hash_target_position": position_hash,
-                "timestamp": timestamp,
-            })
-        self._last_ts = timestamp
-        self._last_nonce = base_nonce + len(commands) - 1
-
-        payload = {
-            "app_type": VELUX_APP_TYPE,
-            "app_version": VELUX_APP_VERSION,
-            "home": {
-                "id": self._home_id,
-                "timezone": self._timezone,
-                "modules": modules,
-            },
-        }
-
-        _LOGGER.debug(
-            "Sending batched setstate for %d window(s) at timestamp %d",
-            len(modules),
-            timestamp,
-        )
-
-        error: Exception | None = None
-        try:
-            session = async_get_clientsession(self._hass)
-            async with session.post(
-                f"{VELUX_API_URL}/syncapi/v1/setstate",
-                json=payload,
-                headers=headers,
-            ) as response:
-                # Handle empty responses (e.g. rate limit or auth failure)
-                text = await response.text()
-                if not text.strip():
-                    error = HomeAssistantError(
-                        f"Empty response from API (status {response.status}) "
-                        "— possibly rate limited or token expired"
-                    )
-                elif not response.ok:
-                    error = HomeAssistantError(f"Signed setstate failed: {text}")
-                else:
-                    result = json.loads(text)
-                    api_errors = result.get("body", {}).get("errors", [])
-                    if api_errors:
-                        error = HomeAssistantError(f"Signed setstate errors: {api_errors}")
-        except Exception as err:
-            error = err
-
-        for cmd in commands:
-            future = cmd["future"]
-            if not future.done():
-                if error:
-                    future.set_exception(error)
-                else:
-                    future.set_result(None)
-
-
-# One batch manager per config entry (shared across all window entities)
-_batch_managers: dict[str, _BatchCommandManager] = {}
-
-
-def _get_batch_manager(entry_id: str) -> _BatchCommandManager:
-    if entry_id not in _batch_managers:
-        _batch_managers[entry_id] = _BatchCommandManager()
-    return _batch_managers[entry_id]
 
 
 async def async_setup_entry(
@@ -359,18 +186,12 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         home-wide lookup when that home has exactly one gateway, so we never
         guess between several.
         """
-        bridge_id = getattr(self.module, "bridge", None)
-        if bridge_id and type(home.modules.get(bridge_id)).__name__ == "NXG":
-            return bridge_id
-
-        gateways = [
+        nxg_ids = [
             module_id
             for module_id, module in home.modules.items()
             if type(module).__name__ == "NXG"
         ]
-        if len(gateways) == 1:
-            return gateways[0]
-        return None
+        return resolve_bridge_id(getattr(self.module, "bridge", None), nxg_ids)
 
     def _get_timezone(self) -> str:
         """Return the HA configured timezone string."""
@@ -394,17 +215,20 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                     "with this window's gateway to control it."
                 )
 
-            batch = _get_batch_manager(self.coordinator.config_entry.entry_id)
+            batch = get_batch_manager(self.coordinator.config_entry.entry_id)
             batch.setup(
                 home_id=home.entity_id,
                 bridge_id=bridge_id,
-                hass=self.coordinator.hass,
+                session=async_get_clientsession(self.coordinator.hass),
                 access_token_getter=self.coordinator.client._auth.async_get_access_token,
                 hash_sign_key=self._hash_sign_key,
                 sign_key_id=self._sign_key_id,
                 timezone=self._get_timezone(),
             )
-            await batch.queue(self._module_id, raw_position)
+            try:
+                await batch.queue(self._module_id, raw_position)
+            except BatchCommandError as err:
+                raise HomeAssistantError(str(err)) from err
             self._set_motion_state(ha_position)
             self.coordinator.start_fast_polling()
             self.async_write_ha_state()

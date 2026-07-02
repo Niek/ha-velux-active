@@ -24,6 +24,7 @@ from .const import (
     CONF_TOKEN_EXPIRES_AT,
     LOGGER,
 )
+from .signing import retrieve_key_error
 
 # Work around pyatmo 9.4.0 until https://github.com/jabesq-org/pyatmo/pull/564 is released.
 ScheduleType._value2member_map_.setdefault("algo", ScheduleType.AUTO)
@@ -298,16 +299,9 @@ class VeluxActiveClient:
             raw: Any = await response.json(content_type=None)
         except (aiohttp.ContentTypeError, JSONDecodeError) as err:
             raise VeluxActiveCannotConnect("Unexpected retrieve_key response") from err
-        if not response.ok:
-            raise VeluxActiveCannotConnect(
-                f"VELUX retrieve_key request failed with status {response.status}"
-            )
-        body = raw.get("body") if isinstance(raw, dict) else None
-        errors = body.get("errors") if isinstance(body, dict) else None
-        if errors:
-            raise VeluxActiveCannotConnect(
-                f"VELUX gateway rejected key retrieval: {errors}"
-            )
+        message = retrieve_key_error(response.ok, response.status, raw)
+        if message:
+            raise VeluxActiveCannotConnect(f"VELUX {message}")
 
     async def async_reauthenticate(self) -> None:
         """Force a fresh password login and store the new tokens."""

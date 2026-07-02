@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import OAuthTokens, VeluxActiveClient
-from .const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID, PLATFORMS
+from .const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID
 from .coordinator import VeluxActiveDataUpdateCoordinator
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
+
+PLATFORMS = [Platform.COVER]
 
 
 async def async_setup_entry(
