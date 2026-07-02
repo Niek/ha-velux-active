@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import json
+
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONTROL_URL, DOMAIN, MANUFACTURER
+from .const import (
+    CONTROL_URL,
+    DOMAIN,
+    MANUFACTURER,
+    VELUX_API_URL,
+    VELUX_APP_TYPE,
+    VELUX_APP_VERSION,
+)
 from .coordinator import VeluxActiveDataUpdateCoordinator
+from .signing import resolve_bridge_id
 
 
 class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
@@ -42,3 +54,70 @@ class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
             name=self.module.name,
             sw_version=str(getattr(self.module, "firmware_revision", "")) or None,
         )
+
+    # ------------------------------------------------------------------
+    # Gateway / setstate helpers shared by the control platforms
+    # ------------------------------------------------------------------
+
+    def _get_home(self):
+        """Return the pyatmo Home object that owns this module."""
+        for home in self.coordinator.client._account.homes.values():
+            if self._module_id in home.modules:
+                return home
+        return None
+
+    def _get_bridge_id(self, home) -> str | None:
+        """Return the gateway module ID for this module's owning home.
+
+        Prefer the module's own ``bridge`` link so accounts with multiple
+        gateways route commands to the correct one, only falling back to a
+        home-wide lookup when that home has exactly one gateway.
+        """
+        nxg_ids = [
+            module_id
+            for module_id, module in home.modules.items()
+            if type(module).__name__ == "NXG"
+        ]
+        return resolve_bridge_id(getattr(self.module, "bridge", None), nxg_ids)
+
+    def _get_timezone(self) -> str:
+        """Return the HA configured timezone string."""
+        return str(self.coordinator.hass.config.time_zone)
+
+    async def _async_setstate(
+        self, home, modules: list[dict], *, action: str = "Command"
+    ) -> None:
+        """POST an unsigned setstate request and raise on any failure.
+
+        Used for gateway-level and mode commands that do not need HMAC signing.
+        """
+        payload = {
+            "app_type": VELUX_APP_TYPE,
+            "app_version": VELUX_APP_VERSION,
+            "home": {
+                "id": home.entity_id,
+                "timezone": self._get_timezone(),
+                "modules": modules,
+            },
+        }
+        access_token = await self.coordinator.client._auth.async_get_access_token()
+        session = async_get_clientsession(self.coordinator.hass)
+        async with session.post(
+            f"{VELUX_API_URL}/syncapi/v1/setstate",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+        ) as response:
+            text = await response.text()
+            if not text.strip():
+                raise HomeAssistantError(
+                    f"{action} returned empty response (status {response.status})"
+                )
+            result = json.loads(text)
+            if not response.ok:
+                raise HomeAssistantError(f"{action} failed: {result}")
+            api_errors = result.get("body", {}).get("errors", [])
+            if api_errors:
+                raise HomeAssistantError(f"{action} errors: {api_errors}")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -20,18 +19,14 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .batch import BatchCommandError, get_batch_manager
 from .const import (
     CONF_HASH_SIGN_KEY,
     CONF_SIGN_KEY_GATEWAY_ID,
     CONF_SIGN_KEY_ID,
-    VELUX_API_URL,
-    VELUX_APP_TYPE,
-    VELUX_APP_VERSION,
 )
-from .batch import BatchCommandError, get_batch_manager
 from .coordinator import VeluxActiveConfigEntry
 from .entity import VeluxActiveEntity
-from .signing import resolve_bridge_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -171,32 +166,6 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _get_home(self):
-        """Return the pyatmo Home object that owns this module."""
-        for home in self.coordinator.client._account.homes.values():
-            if self._module_id in home.modules:
-                return home
-        return None
-
-    def _get_bridge_id(self, home) -> str | None:
-        """Return the gateway module ID for this module's owning home.
-
-        Prefer the module's own ``bridge`` link so accounts with multiple
-        gateways route commands to the correct one. Only fall back to a
-        home-wide lookup when that home has exactly one gateway, so we never
-        guess between several.
-        """
-        nxg_ids = [
-            module_id
-            for module_id, module in home.modules.items()
-            if type(module).__name__ == "NXG"
-        ]
-        return resolve_bridge_id(getattr(self.module, "bridge", None), nxg_ids)
-
-    def _get_timezone(self) -> str:
-        """Return the HA configured timezone string."""
-        return str(self.coordinator.hass.config.time_zone)
-
     async def _move_to_ha_position(self, ha_position: int) -> None:
         raw_position = self._ha_to_raw_position(ha_position)
         if self._is_window_device and self._signing_enabled:
@@ -254,37 +223,11 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                 "Could not find home or gateway for stop command"
             )
 
-        payload = {
-            "app_type": VELUX_APP_TYPE,
-            "app_version": VELUX_APP_VERSION,
-            "home": {
-                "id": home.entity_id,
-                "timezone": self._get_timezone(),
-                "modules": [{"id": bridge_id, "stop_movements": "all"}],
-            },
-        }
-
-        access_token = await self.coordinator.client._auth.async_get_access_token()
-        session = async_get_clientsession(self.coordinator.hass)
-        async with session.post(
-            f"{VELUX_API_URL}/syncapi/v1/setstate",
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            },
-        ) as response:
-            text = await response.text()
-            if not text.strip():
-                raise HomeAssistantError(
-                    f"Stop command returned empty response (status {response.status})"
-                )
-            result = json.loads(text)
-            if not response.ok:
-                raise HomeAssistantError(f"Stop command failed: {result}")
-            api_errors = result.get("body", {}).get("errors", [])
-            if api_errors:
-                raise HomeAssistantError(f"Stop command errors: {api_errors}")
+        await self._async_setstate(
+            home,
+            [{"id": bridge_id, "stop_movements": "all"}],
+            action="Stop command",
+        )
 
         self._motion_state = None
         self._motion_target_position = None
