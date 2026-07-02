@@ -152,9 +152,3 @@ This can happen if the gateway is temporarily offline or the API is rate limited
 ### Gateway Goes Offline
 
 If the gateway loses its cloud connection, the VELUX app will usually also be unable to control devices. Power cycling the gateway for 30 seconds often resolves this.
-
----
-
-## Credits
-
-Based on the original [ha-velux-active](https://github.com/Niek/ha-velux-active) integration by [@Niek](https://github.com/Niek).
