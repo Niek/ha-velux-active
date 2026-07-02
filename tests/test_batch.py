@@ -100,6 +100,26 @@ async def test_body_errors_propagate_as_batch_error():
     raise AssertionError("expected BatchCommandError")
 
 
+async def test_invalid_signing_key_resolves_future_instead_of_hanging():
+    # An un-decodable Base64 key raises during payload build; the queued future
+    # must still resolve (as BatchCommandError), not hang the service call.
+    m = batch.BatchCommandManager()
+    m.setup(
+        home_id="h",
+        bridge_id="b",
+        session=_Session(),
+        access_token_getter=_token,
+        hash_sign_key="!!!not-base64!!!",
+        sign_key_id="kid",
+        timezone="UTC",
+    )
+    try:
+        await asyncio.wait_for(m.queue("m1", 100), timeout=2)
+    except batch.BatchCommandError:
+        return
+    raise AssertionError("expected BatchCommandError")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):

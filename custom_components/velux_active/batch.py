@@ -91,37 +91,39 @@ class BatchCommandManager:
         commands = list(seen.values())
         self._pending.clear()
 
-        timestamp, base_nonce = allocate_nonces(
-            int(time.time()), self._last_ts, self._last_nonce
-        )
-        modules = build_signed_modules(
-            commands,
-            timestamp,
-            base_nonce,
-            self._bridge_id,
-            self._sign_key_id,
-            self._hash_sign_key,
-        )
-        self._last_ts = timestamp
-        self._last_nonce = base_nonce + len(commands) - 1
-
-        payload = {
-            "app_type": VELUX_APP_TYPE,
-            "app_version": VELUX_APP_VERSION,
-            "home": {
-                "id": self._home_id,
-                "timezone": self._timezone,
-                "modules": modules,
-            },
-        }
-        _LOGGER.debug(
-            "Sending batched setstate for %d window(s) at timestamp %d",
-            len(modules),
-            timestamp,
-        )
-
+        # Everything that can fail (e.g. invalid Base64 signing key, network)
+        # must be inside the try so every queued future gets resolved.
         error: Exception | None = None
         try:
+            timestamp, base_nonce = allocate_nonces(
+                int(time.time()), self._last_ts, self._last_nonce
+            )
+            modules = build_signed_modules(
+                commands,
+                timestamp,
+                base_nonce,
+                self._bridge_id,
+                self._sign_key_id,
+                self._hash_sign_key,
+            )
+            self._last_ts = timestamp
+            self._last_nonce = base_nonce + len(commands) - 1
+
+            payload = {
+                "app_type": VELUX_APP_TYPE,
+                "app_version": VELUX_APP_VERSION,
+                "home": {
+                    "id": self._home_id,
+                    "timezone": self._timezone,
+                    "modules": modules,
+                },
+            }
+            _LOGGER.debug(
+                "Sending batched setstate for %d window(s) at timestamp %d",
+                len(modules),
+                timestamp,
+            )
+
             access_token = await self._access_token_getter()
             async with self._session.post(
                 f"{VELUX_API_URL}/syncapi/v1/setstate",
@@ -144,7 +146,7 @@ class BatchCommandManager:
                     if api_errors:
                         error = BatchCommandError(f"Signed setstate errors: {api_errors}")
         except Exception as err:
-            error = err
+            error = err if isinstance(err, BatchCommandError) else BatchCommandError(str(err))
 
         for cmd in commands:
             future = cmd["future"]

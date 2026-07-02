@@ -14,17 +14,17 @@ Do not edit Home Assistant `.storage/core.config_entries` directly. If you alrea
 
 ---
 
-## Standalone Local Retrieval Helper
+## Standalone Retrieval Helper
 
-The repo includes a small helper for exercising the local Netcom key retrieval path outside the Home Assistant UI:
+The repo includes a small end-to-end helper that runs the whole pairing flow outside the Home Assistant UI:
 
 ```bash
-python3 dev/retrieve-signing-key.py --host GATEWAY_IP_OR_HOSTNAME
+python3 dev/retrieve-signing-key.py --username YOU@EXAMPLE.COM --host GATEWAY_IP_OR_HOSTNAME
 ```
 
-This helper expects the gateway's local retrieve-key listener to already be active. Trigger pairing from Home Assistant or another client first, wait for the gateway LED to flash, press the physical gateway button, then run the helper.
+It logs in to VELUX/Netatmo, triggers cloud `retrieve_key` mode on the gateway, prompts you to press the physical gateway button once the LED flashes, then reads the signing key from the gateway's local Netcom listener — the same sequence the config flow runs.
 
-The helper only talks to the local gateway. It does not log in to VELUX/Netatmo and does not trigger cloud `retrieve_key` mode by itself.
+For multi-gateway accounts, pass `--gateway GATEWAY_MODULE_ID`; the password is prompted if `--password` is omitted. It needs the same runtime deps as the integration (`pyatmo`, `aiohttp`, `cryptography`), though `--help` works without them.
 
 ---
 
