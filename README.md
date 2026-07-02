@@ -11,11 +11,13 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 
 ### Via HACS
 
-1. Open HACS in Home Assistant.
-2. Go to **Integrations** -> three-dot menu -> **Custom repositories**.
-3. Add this repository URL and select **Integration** as the category.
-4. Search for **Velux Active** and install it.
-5. Restart Home Assistant.
+[![Open Velux Active with Netatmo in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active)
+
+1. Click the button above to open the integration in HACS.
+2. Select `Download`.
+3. Restart Home Assistant.
+
+If the button does not work, open HACS and search for `Velux Active with Netatmo`.
 
 ### Manual
 
