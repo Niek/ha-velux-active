@@ -132,6 +132,31 @@ When multiple windows are commanded at the same time, commands are sent in a sin
 
 ## Troubleshooting
 
+### Standalone Debug Client
+
+This repository includes `client.py`, a standalone `uv` script for checking login, device discovery, raw API responses, and control commands outside Home Assistant.
+
+Examples:
+
+```sh
+./client.py login you@example.com 'your-password'
+./client.py list-devices --email you@example.com --password 'your-password'
+./client.py raw-homesdata --email you@example.com --password 'your-password'
+./client.py set-cover-position <device_id> 50 --email you@example.com --password 'your-password'
+```
+
+To reuse tokens from an existing Home Assistant setup without printing them, export them from `.storage/core.config_entries`:
+
+```sh
+eval "$(ssh root@HOME_ASSISTANT_HOST 'cat /config/.storage/core.config_entries' | jq -r '.data.entries[] | select(.domain == "velux_active").data | @sh "export VELUX_ACCESS_TOKEN=\(.access_token) VELUX_REFRESH_TOKEN=\(.refresh_token) VELUX_EXPIRES_AT=\(.token_expires_at)"')"
+```
+
+Then run:
+
+```sh
+./client.py list-devices
+```
+
 ### Gateway Pairing Fails
 
 Check that:
