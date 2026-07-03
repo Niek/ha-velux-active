@@ -16,8 +16,12 @@ from .entity import VeluxActiveEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-MODE_ALGO_ENABLED = "auto"
-MODE_ALGO_DISABLED = "algo_disabled"
+# Values the official app writes to toggle the algorithm (from the APK).
+WRITE_MODE_ON = "algo_available"
+WRITE_MODE_OFF = "manual"
+# Modes reported on read. "algo_disabled" is a read-only off state.
+_ON_MODES = frozenset({"algo_available"})
+_OFF_MODES = frozenset({"manual", "algo_disabled"})
 
 
 async def async_setup_entry(
@@ -52,19 +56,21 @@ class VeluxAlgorithmSwitch(VeluxActiveEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return True when automatic ventilation is active."""
+        """Return True/False for known algorithm modes, None if unknown."""
         mode = getattr(self.module, "mode", None)
-        if mode is None:
-            return None
-        return mode != MODE_ALGO_DISABLED
+        if mode in _ON_MODES:
+            return True
+        if mode in _OFF_MODES:
+            return False
+        return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable automatic ventilation."""
-        await self._async_set_mode(MODE_ALGO_ENABLED)
+        await self._async_set_mode(WRITE_MODE_ON)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable automatic ventilation."""
-        await self._async_set_mode(MODE_ALGO_DISABLED)
+        await self._async_set_mode(WRITE_MODE_OFF)
 
     async def _async_set_mode(self, mode: str) -> None:
         """Send an unsigned mode setstate command for this window."""
