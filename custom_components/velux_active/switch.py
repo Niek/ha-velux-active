@@ -19,8 +19,9 @@ _LOGGER = logging.getLogger(__name__)
 # Values the official app writes to toggle the algorithm (from the APK).
 WRITE_MODE_ON = "algo_available"
 WRITE_MODE_OFF = "manual"
-# Modes reported on read. "algo_disabled" is a read-only off state.
-_ON_MODES = frozenset({"algo_available"})
+# Modes reported on read. "algo_available"/"algo_active" are algorithm-on
+# states; "algo_disabled" is a read-only off state.
+_ON_MODES = frozenset({"algo_available", "algo_active"})
 _OFF_MODES = frozenset({"manual", "algo_disabled"})
 
 
@@ -43,7 +44,6 @@ class VeluxAlgorithmSwitch(VeluxActiveEntity, SwitchEntity):
     """Switch to enable or disable automatic ventilation for a window."""
 
     _attr_icon = "mdi:air-filter"
-    _attr_name = "Auto Ventilation"
 
     def __init__(
         self,
@@ -52,6 +52,8 @@ class VeluxAlgorithmSwitch(VeluxActiveEntity, SwitchEntity):
     ) -> None:
         """Initialize the switch."""
         super().__init__(coordinator, module_id)
+        # Set after super().__init__, which resets _attr_name to None.
+        self._attr_name = "Auto Ventilation"
         self._attr_unique_id = f"{module_id}_auto_ventilation"
 
     @property
