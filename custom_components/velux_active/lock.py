@@ -31,7 +31,7 @@ from .const import (
 )
 from .coordinator import VeluxActiveConfigEntry, VeluxActiveDataUpdateCoordinator
 from .entity import async_post_setstate
-from .signing import compute_scenario_hash
+from .signing import allocate_nonces, compute_scenario_hash
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,6 +90,10 @@ class VeluxDepartureLock(
             CONF_SIGN_KEY_GATEWAY_ID, ""
         ).strip()
         self._signing_enabled: bool = bool(self._hash_sign_key and self._sign_key_id)
+        # Match the app's signer: advance the nonce when the timestamp repeats
+        # so two unlocks in the same second never reuse a (timestamp, nonce) pair.
+        self._last_ts: int = 0
+        self._last_nonce: int = -1
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -136,10 +140,10 @@ class VeluxDepartureLock(
                 f"not {self._bridge_id}; re-pair to unlock this gateway."
             )
 
-        # A single command per unlock, so a fresh timestamp with nonce 0 never
-        # reuses a (timestamp, nonce) pair.
-        timestamp = int(time.time())
-        nonce = 0
+        timestamp, nonce = allocate_nonces(
+            int(time.time()), self._last_ts, self._last_nonce
+        )
+        self._last_ts, self._last_nonce = timestamp, nonce
         module = {
             "id": self._bridge_id,
             "nonce": nonce,
