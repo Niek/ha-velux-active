@@ -87,37 +87,54 @@ class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
     async def _async_setstate(
         self, home, modules: list[dict], *, action: str = "Command"
     ) -> None:
-        """POST an unsigned setstate request and raise on any failure.
+        """POST a setstate request for this entity's coordinator/home."""
+        await async_post_setstate(
+            self.coordinator.hass,
+            self.coordinator.client,
+            home.entity_id,
+            self._get_timezone(),
+            modules,
+            action=action,
+        )
 
-        Used for gateway-level and mode commands that do not need HMAC signing.
-        """
-        payload = {
-            "app_type": VELUX_APP_TYPE,
-            "app_version": VELUX_APP_VERSION,
-            "home": {
-                "id": home.entity_id,
-                "timezone": self._get_timezone(),
-                "modules": modules,
-            },
-        }
-        access_token = await self.coordinator.client._auth.async_get_access_token()
-        session = async_get_clientsession(self.coordinator.hass)
-        async with session.post(
-            f"{VELUX_API_URL}/syncapi/v1/setstate",
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            },
-        ) as response:
-            text = await response.text()
-            if not text.strip():
-                raise HomeAssistantError(
-                    f"{action} returned empty response (status {response.status})"
-                )
-            result = json.loads(text)
-            if not response.ok:
-                raise HomeAssistantError(f"{action} failed: {result}")
-            api_errors = result.get("body", {}).get("errors", [])
-            if api_errors:
-                raise HomeAssistantError(f"{action} errors: {api_errors}")
+
+async def async_post_setstate(
+    hass,
+    client,
+    home_id: str,
+    timezone: str,
+    modules: list[dict],
+    *,
+    action: str = "Command",
+) -> None:
+    """POST a setstate request and raise HomeAssistantError on any failure.
+
+    Shared by the cover, switch and lock platforms; signed and unsigned
+    commands differ only in the per-module fields the caller supplies.
+    """
+    payload = {
+        "app_type": VELUX_APP_TYPE,
+        "app_version": VELUX_APP_VERSION,
+        "home": {"id": home_id, "timezone": timezone, "modules": modules},
+    }
+    access_token = await client._auth.async_get_access_token()
+    session = async_get_clientsession(hass)
+    async with session.post(
+        f"{VELUX_API_URL}/syncapi/v1/setstate",
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+    ) as response:
+        text = await response.text()
+        if not text.strip():
+            raise HomeAssistantError(
+                f"{action} returned empty response (status {response.status})"
+            )
+        result = json.loads(text)
+        if not response.ok:
+            raise HomeAssistantError(f"{action} failed: {result}")
+        api_errors = result.get("body", {}).get("errors", [])
+        if api_errors:
+            raise HomeAssistantError(f"{action} errors: {api_errors}")

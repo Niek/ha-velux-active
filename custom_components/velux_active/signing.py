@@ -20,6 +20,13 @@ def decode_hash_sign_key(hash_sign_key_b64: str) -> bytes:
     return base64.b64decode(value, validate=True)
 
 
+def _sign(hash_sign_key_b64: str, message: str) -> str:
+    """HMAC-SHA512 the message with the decoded key, URL-safe Base64 encoded."""
+    key = decode_hash_sign_key(hash_sign_key_b64)
+    digest = hmac.new(key, message.encode("utf-8"), hashlib.sha512).digest()
+    return base64.b64encode(digest).decode("utf-8").replace("+", "-").replace("/", "_")
+
+
 def compute_hash(
     hash_sign_key_b64: str,
     position: int,
@@ -27,18 +34,25 @@ def compute_hash(
     nonce: int,
     device_id: str,
 ) -> str:
-    """Compute the HMAC-SHA512 hash required to sign a window position command.
+    """HMAC for a window position command: msg = target_position{...}."""
+    return _sign(
+        hash_sign_key_b64,
+        f"target_position{position}{timestamp}{nonce}{device_id}",
+    )
 
-    Formula:
-        msg  = f"target_position{position}{timestamp}{nonce}{device_id}"
-        hash = HMAC-SHA512(key=base64decode(HashSignKey), msg=msg)
-        result = base64encode(hash).replace('+', '-').replace('/', '_')
-    """
-    string_to_hash = f"target_position{position}{timestamp}{nonce}{device_id}"
-    key = decode_hash_sign_key(hash_sign_key_b64)
-    digest = hmac.new(key, string_to_hash.encode("utf-8"), hashlib.sha512).digest()
-    result = base64.b64encode(digest).decode("utf-8")
-    return result.replace("+", "-").replace("/", "_")
+
+def compute_scenario_hash(
+    hash_sign_key_b64: str,
+    scenario: str,
+    timestamp: int,
+    nonce: int,
+    bridge_id: str,
+) -> str:
+    """HMAC for a gateway scenario command: msg = scenario{...}."""
+    return _sign(
+        hash_sign_key_b64,
+        f"scenario{scenario}{timestamp}{nonce}{bridge_id}",
+    )
 
 
 def allocate_nonces(now_ts: int, last_ts: int, last_nonce: int) -> tuple[int, int]:
