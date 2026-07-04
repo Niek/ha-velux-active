@@ -5,6 +5,7 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 - **Roof windows** - open, close, set position, stop. Requires one-time gateway pairing for signing keys.
 - **Roller shutters and awning blinds** - open, close, set position, stop. Works out of the box.
 - **Automatic ventilation** - enable or disable the gateway algorithm for roof windows. Works without signing keys.
+- **Departure mode** - lock/unlock all movement via the gateway (e.g. for alarm integrations). Locking works without keys; unlocking requires signing.
 
 ---
 
@@ -76,8 +77,18 @@ After setup, the integration creates cover entities for supported devices:
 - **Roof windows**: `cover.window_name` - open, close, set position, stop.
 - **Roof windows**: `switch.window_name_auto_ventilation` - enable or disable automatic ventilation.
 - **Roller shutters / awning blinds**: `cover.blind_name` - open, close, set position, stop.
+- **Gateway**: `lock.velux_gateway_departure_mode` - lock (away) or unlock (home) departure mode.
 
 Roof-window movement requires signing keys. Roller shutters, awning blinds, and the auto-ventilation switch work without signing keys.
+
+---
+
+## Departure Mode
+
+Each VELUX gateway is exposed as a **Departure Mode** lock:
+
+- Locked (away): the gateway disables all window and blind movement. This is an unsigned command and works without signing keys.
+- Unlocked (home): normal operation resumes. Unlocking is a signed command, so it needs the same signing keys as roof-window control — without them the lock stays available but unlocking fails with a clear error.
 
 ---
 

@@ -12,6 +12,7 @@ from signing import (  # noqa: E402
     allocate_nonces,
     build_signed_modules,
     compute_hash,
+    compute_scenario_hash,
     resolve_bridge_id,
     retrieve_key_error,
 )
@@ -80,6 +81,21 @@ def test_build_signed_modules_assigns_sequential_nonces_and_signs():
     assert mods[0]["sign_key_id"] == "kid"
     assert mods[0]["target_position"] == 100
     assert mods[0]["hash_target_position"] == compute_hash(KEY, 100, 12345, 3, "m1")
+
+
+def test_scenario_hash_deterministic_urlsafe_and_field_sensitive():
+    base = compute_scenario_hash(KEY, "home", 12345, 0, "bridge1")
+    assert base == compute_scenario_hash(KEY, "home", 12345, 0, "bridge1")
+    assert "+" not in base and "/" not in base
+    assert compute_scenario_hash(KEY, "away", 12345, 0, "bridge1") != base  # scenario
+    assert compute_scenario_hash(KEY, "home", 99999, 0, "bridge1") != base  # timestamp
+    assert compute_scenario_hash(KEY, "home", 12345, 1, "bridge1") != base  # nonce
+    assert compute_scenario_hash(KEY, "home", 12345, 0, "bridge2") != base  # bridge
+
+
+def test_scenario_hash_differs_from_position_hash():
+    # Different message prefix -> must not collide with a window position hash.
+    assert compute_scenario_hash(KEY, "home", 1, 0, "x") != compute_hash(KEY, 0, 1, 0, "x")
 
 
 def test_retrieve_key_error_flags_http_and_body_errors():
