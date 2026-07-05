@@ -37,10 +37,12 @@ from pyatmo.const import (
     DEFAULT_BASE_URL,
     GETHOMESDATA_ENDPOINT,
     GETHOMESTATUS_ENDPOINT,
+    HOME,
     SETSTATE_ENDPOINT,
 )
 from pyatmo.enums import ScheduleType
 from pyatmo.exceptions import NoDeviceError
+from pyatmo.helpers import extract_raw_data
 from pyatmo.modules.device_types import DeviceType
 from signing import (
     allocate_nonces,
@@ -61,6 +63,32 @@ DEFAULT_TIMEOUT = 10.0
 DEFAULT_SYNC_BASE_URL = "https://app.velux-active.com"
 DEFAULT_APP_TYPE = "app_velux"
 DEFAULT_TIMEZONE = "UTC"
+BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
+ROOM_MEASUREMENT_KEYS = (
+    "temperature",
+    "co2",
+    "humidity",
+    "lux",
+    "air_quality",
+    "algo_status",
+    "auto_close_ts",
+    "min_comfort_temperature",
+    "max_comfort_temperature",
+    "min_comfort_humidity",
+    "max_comfort_humidity",
+    "max_comfort_co2",
+)
+MODULE_STATUS_KEYS = (
+    "type",
+    "battery_level",
+    "battery_percent",
+    "battery_state",
+    "reachable",
+    "last_seen",
+    "rf_state",
+    "rf_strength",
+    "firmware_revision",
+)
 
 
 class VeluxAuthError(RuntimeError):
@@ -581,8 +609,8 @@ async def command_list_devices(args: argparse.Namespace) -> dict[str, Any]:
 
     async with aiohttp.ClientSession() as websession:
         auth = build_auth(args, websession)
-        account = await load_account(auth)
-    return serialize_account(account)
+        account, raw_status_by_home_id = await load_account_with_raw_status(auth)
+    return serialize_account(account, raw_status_by_home_id)
 
 
 async def command_raw_homesdata(args: argparse.Namespace) -> dict[str, Any]:
@@ -791,14 +819,33 @@ def build_auth(
 async def load_account(auth: VeluxAsyncAuth) -> pyatmo.AsyncAccount:
     """Load homes and device status."""
 
+    account, _raw_status_by_home_id = await load_account_with_raw_status(auth)
+    return account
+
+
+async def load_account_with_raw_status(
+    auth: VeluxAsyncAuth,
+) -> tuple[pyatmo.AsyncAccount, dict[str, dict[str, Any]]]:
+    """Load homes, update status, and keep raw status for debug serialization."""
+
     account = pyatmo.AsyncAccount(auth)
+    raw_status_by_home_id: dict[str, dict[str, Any]] = {}
     await account.async_update_topology()
     for home_id in sorted(account.homes):
         try:
-            await account.async_update_status(home_id)
+            raw_status = await post_api_json(
+                auth,
+                GETHOMESTATUS_ENDPOINT,
+                params={"home_id": home_id},
+            )
+            raw_data = extract_raw_data(raw_status, HOME)
+            await account.homes[home_id].update(
+                raw_data, do_raise_for_reachability_error=True
+            )
+            raw_status_by_home_id[home_id] = raw_status
         except NoDeviceError:
             pass
-    return account
+    return account, raw_status_by_home_id
 
 
 async def post_api_json(
@@ -1055,38 +1102,72 @@ def require_interactive_gateway_prompt(no_prompt: bool) -> None:
     )
 
 
-def serialize_account(account: pyatmo.AsyncAccount) -> dict[str, Any]:
+def serialize_account(
+    account: pyatmo.AsyncAccount,
+    raw_status_by_home_id: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Serialize account data."""
 
+    raw_status_by_home_id = raw_status_by_home_id or {}
     homes = [
-        serialize_home(home) for home in sorted(account.homes.values(), key=home_key)
+        serialize_home(home, raw_status_by_home_id.get(home.entity_id))
+        for home in sorted(account.homes.values(), key=home_key)
     ]
     return {"user": account.user, "homes": homes}
 
 
-def serialize_home(home: pyatmo.Home) -> dict[str, Any]:
+def serialize_home(
+    home: pyatmo.Home,
+    raw_status: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Serialize a home."""
 
+    raw_home = raw_status_home(raw_status or {})
+    raw_rooms = {
+        room["id"]: room
+        for room in raw_home.get("rooms") or []
+        if isinstance(room, dict) and room.get("id")
+    }
+    raw_modules = {
+        module["id"]: module
+        for module in raw_home.get("modules") or []
+        if isinstance(module, dict) and module.get("id")
+    }
     rooms = [
-        {
-            "id": room.entity_id,
-            "name": room.name,
-            "device_types": sorted(
-                device_type.value for device_type in room.device_types
-            ),
-        }
+        serialize_room(room, raw_rooms.get(room.entity_id))
         for room in sorted(
             home.rooms.values(), key=lambda item: (item.name, item.entity_id)
         )
     ]
     modules = [
-        serialize_module(home, module)
+        serialize_module(home, module, raw_modules.get(module.entity_id))
         for module in sorted(home.modules.values(), key=module_key)
     ]
     return {"id": home.entity_id, "name": home.name, "rooms": rooms, "modules": modules}
 
 
-def serialize_module(home: pyatmo.Home, module: pyatmo.Module) -> dict[str, Any]:
+def serialize_room(
+    room: pyatmo.Room,
+    raw_room: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Serialize a room, including raw VELUX climate measurements if present."""
+
+    data: dict[str, Any] = {
+        "id": room.entity_id,
+        "name": room.name,
+        "device_types": sorted(device_type.value for device_type in room.device_types),
+    }
+    raw_room = raw_room or {}
+    for key in ROOM_MEASUREMENT_KEYS:
+        add_if_present(data, key, raw_room.get(key))
+    return data
+
+
+def serialize_module(
+    home: pyatmo.Home,
+    module: pyatmo.Module,
+    raw_module: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Serialize a module."""
 
     room = home.rooms.get(module.room_id) if module.room_id else None
@@ -1103,6 +1184,15 @@ def serialize_module(home: pyatmo.Home, module: pyatmo.Module) -> dict[str, Any]
         "bridge": module.bridge,
         "reachable": module.reachable,
     }
+
+    raw_module = raw_module or {}
+    raw_type = raw_module.get("type")
+    if raw_type in BATTERY_MODULE_TYPES:
+        add_if_present(data, "api_type", raw_type)
+        for key in MODULE_STATUS_KEYS:
+            if key == "type":
+                continue
+            add_if_present(data, key, raw_module.get(key))
 
     add_if_present(
         data, "features", sorted(module.features) if module.features else None
@@ -1140,6 +1230,16 @@ def serialize_module(home: pyatmo.Home, module: pyatmo.Module) -> dict[str, Any]
     )
     add_if_present(data, "last_seen", getattr(module, "last_seen", None))
     return data
+
+
+def raw_status_home(raw_status: dict[str, Any]) -> dict[str, Any]:
+    """Return the nested home payload from a raw homestatus response."""
+
+    body = raw_status.get("body")
+    if not isinstance(body, dict):
+        return {}
+    home = body.get("home")
+    return home if isinstance(home, dict) else {}
 
 
 def serialize_signing_key(

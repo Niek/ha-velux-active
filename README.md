@@ -6,6 +6,7 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 - **Roller shutters and awning blinds** - open, close, set position, stop. Works out of the box.
 - **Automatic ventilation** - enable or disable the gateway algorithm for roof windows. Works without signing keys.
 - **Departure mode** - lock/unlock all movement via the gateway (e.g. for alarm integrations). Locking works without keys; unlocking requires signing.
+- **Room climate sensors** - temperature, CO2, humidity, illuminance, air quality, and NXS/NXD module battery diagnostics.
 
 ---
 
@@ -72,12 +73,14 @@ Advanced/debug signing-key extraction notes are in [`dev/signing-key-extraction.
 
 ## Entities
 
-After setup, the integration creates cover entities for supported devices:
+After setup, the integration creates entities for supported devices:
 
 - **Roof windows**: `cover.window_name` - open, close, set position, stop.
 - **Roof windows**: `switch.window_name_auto_ventilation` - enable or disable automatic ventilation.
 - **Roller shutters / awning blinds**: `cover.blind_name` - open, close, set position, stop.
 - **Gateway**: `lock.velux_gateway_departure_mode` - lock (away) or unlock (home) departure mode.
+- **Rooms with NXS climate sensors**: temperature, CO2, humidity, illuminance, and air-quality-index sensors.
+- **NXS/NXD modules**: diagnostic battery sensor with battery state and RF attributes.
 
 Roof-window movement requires signing keys. Roller shutters, awning blinds, and the auto-ventilation switch work without signing keys.
 

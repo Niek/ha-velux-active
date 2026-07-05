@@ -12,9 +12,16 @@ from typing import Any, Callable
 import aiohttp
 from pyatmo.account import AsyncAccount
 from pyatmo.auth import AbstractAsyncAuth
-from pyatmo.const import AUTH_REQ_ENDPOINT, GETHOMESDATA_ENDPOINT, SETSTATE_ENDPOINT
+from pyatmo.const import (
+    AUTH_REQ_ENDPOINT,
+    GETHOMESDATA_ENDPOINT,
+    GETHOMESTATUS_ENDPOINT,
+    HOME,
+    SETSTATE_ENDPOINT,
+)
 from pyatmo.enums import ScheduleType
 from pyatmo.exceptions import NoDeviceError
+from pyatmo.helpers import extract_raw_data
 from pyatmo.home import Home
 from pyatmo.modules import NXO
 
@@ -83,8 +90,14 @@ class VeluxActiveData:
     user: str | None
     homes: dict[str, Home]
     covers: dict[str, Any]
+    rooms: dict[str, dict[str, Any]]
+    sensor_modules: dict[str, dict[str, Any]]
 
 
+BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
+ROOM_MEASUREMENT_KEYS = frozenset(
+    {"temperature", "co2", "humidity", "lux", "air_quality"}
+)
 
 
 class VeluxActiveAuth(AbstractAsyncAuth):
@@ -282,6 +295,14 @@ class VeluxActiveClient:
         response = await self._auth.async_post_api_request(endpoint=GETHOMESDATA_ENDPOINT)
         return await response.json()
 
+    async def async_get_raw_homestatus(self, home_id: str) -> dict[str, Any]:
+        """Return raw homestatus from the Velux API."""
+        response = await self._auth.async_post_api_request(
+            endpoint=GETHOMESTATUS_ENDPOINT,
+            params={"home_id": home_id},
+        )
+        return await response.json()
+
     async def async_trigger_retrieve_key(self, home_id: str, gateway_id: str) -> None:
         """Ask the gateway to open its temporary local key retrieval listener."""
         response = await self._auth.async_post_api_request(
@@ -318,6 +339,7 @@ class VeluxActiveClient:
             len(self._account.homes),
             sorted(self._account.homes),
         )
+        raw_status_by_home_id: dict[str, dict[str, Any]] = {}
         for home_id, home in list(self._account.homes.items()):
             if not home.modules:
                 LOGGER.debug(
@@ -335,7 +357,10 @@ class VeluxActiveClient:
                 len(home.modules),
             )
             try:
-                await self._account.async_update_status(home_id)
+                raw_status = await self.async_get_raw_homestatus(home_id)
+                raw_data = extract_raw_data(raw_status, HOME)
+                await home.update(raw_data, do_raise_for_reachability_error=True)
+                raw_status_by_home_id[home_id] = raw_status
             except NoDeviceError as err:
                 LOGGER.warning(
                     "Keeping VELUX Active home with topology-only data because "
@@ -359,12 +384,85 @@ class VeluxActiveClient:
             {mid: type(m).__name__ for mid, m in covers.items()},
         )
 
+        rooms, sensor_modules = _extract_climate_status(
+            self._account.homes, raw_status_by_home_id
+        )
+
         return VeluxActiveData(
             user=self._account.user,
             homes=dict(self._account.homes),
             covers=covers,
+            rooms=rooms,
+            sensor_modules=sensor_modules,
         )
 
     @property
     def tokens(self) -> OAuthTokens | None:
         return self._auth.tokens
+
+
+def _extract_climate_status(
+    homes: Mapping[str, Home],
+    raw_status_by_home_id: Mapping[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Extract VELUX room measurements and battery modules from raw homestatus."""
+    rooms: dict[str, dict[str, Any]] = {}
+    sensor_modules: dict[str, dict[str, Any]] = {}
+
+    for home_id, raw_status in raw_status_by_home_id.items():
+        home = homes.get(home_id)
+        raw_home = _raw_status_home(raw_status)
+
+        for raw_room in raw_home.get("rooms") or []:
+            if not _has_room_measurement(raw_room):
+                continue
+
+            room_id = str(raw_room.get("id") or "")
+            if not room_id:
+                continue
+
+            room = home.rooms.get(room_id) if home is not None else None
+            room_data = dict(raw_room)
+            room_data["home_id"] = home_id
+            if room is not None:
+                room_data["name"] = room.name
+                room_data["module_ids"] = list(room.modules)
+            rooms[_status_key(home_id, room_id)] = room_data
+
+        for raw_module in raw_home.get("modules") or []:
+            module_type = raw_module.get("type")
+            if module_type not in BATTERY_MODULE_TYPES:
+                continue
+
+            module_id = str(raw_module.get("id") or "")
+            if not module_id:
+                continue
+
+            module = home.modules.get(module_id) if home is not None else None
+            module_data = dict(raw_module)
+            module_data["home_id"] = home_id
+            if module is not None:
+                module_data["name"] = module.name
+                module_data["room_id"] = module.room_id
+            sensor_modules[module_id] = module_data
+
+    return rooms, sensor_modules
+
+
+def _raw_status_home(raw_status: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the nested home payload from a raw homestatus response."""
+    body = raw_status.get("body")
+    if not isinstance(body, Mapping):
+        return {}
+    home = body.get("home")
+    return dict(home) if isinstance(home, Mapping) else {}
+
+
+def _has_room_measurement(raw_room: Mapping[str, Any]) -> bool:
+    """Return True when a raw room carries VELUX climate measurements."""
+    return any(key in raw_room for key in ROOM_MEASUREMENT_KEYS)
+
+
+def _status_key(home_id: str, entity_id: str) -> str:
+    """Scope homestatus room IDs by home to avoid cross-home collisions."""
+    return f"{home_id}:{entity_id}"

@@ -13,7 +13,7 @@ from .coordinator import VeluxActiveDataUpdateCoordinator
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
 
-PLATFORMS = [Platform.COVER, Platform.LOCK, Platform.SWITCH]
+PLATFORMS = [Platform.COVER, Platform.LOCK, Platform.SENSOR, Platform.SWITCH]
 
 
 async def async_setup_entry(
