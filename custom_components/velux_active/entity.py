@@ -52,8 +52,18 @@ class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
             manufacturer=MANUFACTURER,
             model=model,
             name=self.module.name,
+            suggested_area=self._module_room_name(),
             sw_version=str(getattr(self.module, "firmware_revision", "")) or None,
         )
+
+    def _module_room_name(self) -> str | None:
+        """Return the owning room name for suggested HA area assignment."""
+        room_id = getattr(self.module, "room_id", None)
+        if not room_id:
+            return None
+        home = self._get_home()
+        room = home.rooms.get(room_id) if home is not None else None
+        return room.name if room is not None else None
 
     # ------------------------------------------------------------------
     # Gateway / setstate helpers shared by the control platforms

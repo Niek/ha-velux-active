@@ -414,7 +414,7 @@ def _extract_climate_status(
         raw_home = _raw_status_home(raw_status)
 
         for raw_room in raw_home.get("rooms") or []:
-            if not _has_room_measurement(raw_room):
+            if not isinstance(raw_room, Mapping) or not _has_room_measurement(raw_room):
                 continue
 
             room_id = str(raw_room.get("id") or "")
@@ -430,6 +430,8 @@ def _extract_climate_status(
             rooms[_status_key(home_id, room_id)] = room_data
 
         for raw_module in raw_home.get("modules") or []:
+            if not isinstance(raw_module, Mapping):
+                continue
             module_type = raw_module.get("type")
             if module_type not in BATTERY_MODULE_TYPES:
                 continue
@@ -444,6 +446,9 @@ def _extract_climate_status(
             if module is not None:
                 module_data["name"] = module.name
                 module_data["room_id"] = module.room_id
+                room = home.rooms.get(module.room_id) if module.room_id else None
+                if room is not None:
+                    module_data["room_name"] = room.name
             sensor_modules[module_id] = module_data
 
     return rooms, sensor_modules

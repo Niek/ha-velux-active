@@ -114,7 +114,7 @@ HOMESTATUS = {
 }
 
 
-def test_serialize_home_includes_raw_room_measurements_and_module_batteries():
+def test_serialize_home_includes_room_measurements_and_module_batteries():
     home = Home(None, HOME_TOPOLOGY)
     asyncio.run(home.update(extract_raw_data(HOMESTATUS, HOME)))
 
@@ -140,6 +140,7 @@ def test_serialize_home_includes_raw_room_measurements_and_module_batteries():
     assert nxs["last_seen"] == 1783156874
     assert nxs["rf_state"] == "full"
     assert nxs["rf_strength"] == 50
+    assert "temperature" not in nxs
 
     nxd = next(item for item in serialized["modules"] if item["id"] == "nxd1")
     assert nxd["api_type"] == "NXD"

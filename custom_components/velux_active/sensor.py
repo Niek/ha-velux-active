@@ -135,8 +135,8 @@ async def async_setup_entry(
                 entities.append(VeluxRoomSensor(coordinator, room_key, description))
                 room_entities.add(entity_key)
 
-        for module_id in sorted(coordinator.data.sensor_modules):
-            if module_id in module_entities:
+        for module_id, module in sorted(coordinator.data.sensor_modules.items()):
+            if "battery_percent" not in module or module_id in module_entities:
                 continue
             entities.append(VeluxModuleBatterySensor(coordinator, module_id))
             module_entities.add(module_id)
@@ -175,7 +175,7 @@ class VeluxRoomSensor(
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Group all measurements of a room under one device."""
+        """Group all measurements of a room under one virtual device."""
         room = self._room
         return DeviceInfo(
             configuration_url=CONTROL_URL,
@@ -183,6 +183,7 @@ class VeluxRoomSensor(
             manufacturer=MANUFACTURER,
             model="Room Climate",
             name=room.get("name") or f"Room {room.get('id', self._room_key)}",
+            suggested_area=room.get("name"),
         )
 
     @property
@@ -240,18 +241,7 @@ class VeluxModuleBatterySensor(
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info for the physical sensor module."""
-        module = self._module
-        firmware_revision = module.get("firmware_revision")
-        return DeviceInfo(
-            configuration_url=CONTROL_URL,
-            identifiers={(DOMAIN, self._module_id)},
-            manufacturer=MANUFACTURER,
-            model=MODULE_MODELS.get(module.get("type"), "Sensor Module"),
-            name=module.get("name") or self._module_id,
-            sw_version=(
-                str(firmware_revision) if firmware_revision is not None else None
-            ),
-        )
+        return _module_device_info(self._module_id, self._module)
 
     @property
     def native_value(self) -> int | None:
@@ -275,3 +265,17 @@ class VeluxModuleBatterySensor(
             super().available
             and self._module_id in self.coordinator.data.sensor_modules
         )
+
+
+def _module_device_info(module_id: str, module: dict[str, Any]) -> DeviceInfo:
+    """Return HA device metadata for a physical VELUX sensor module."""
+    firmware_revision = module.get("firmware_revision")
+    return DeviceInfo(
+        configuration_url=CONTROL_URL,
+        identifiers={(DOMAIN, module_id)},
+        manufacturer=MANUFACTURER,
+        model=MODULE_MODELS.get(module.get("type"), "Sensor Module"),
+        name=module.get("name") or module_id,
+        suggested_area=module.get("room_name"),
+        sw_version=str(firmware_revision) if firmware_revision is not None else None,
+    )
