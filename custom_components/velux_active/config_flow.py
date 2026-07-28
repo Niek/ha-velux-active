@@ -152,7 +152,8 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._pair_gateway_choices = _get_gateway_choices(
                     await self._client.async_get_raw_homesdata()
                 )
-            except (VeluxActiveCannotConnect, VeluxPairingError):
+            except (VeluxActiveCannotConnect, VeluxPairingError) as err:
+                LOGGER.warning("Failed to load VELUX gateways for pairing: %s", err)
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error loading Velux Active gateways")
@@ -184,7 +185,8 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pair_gateway_host = user_input[FIELD_GATEWAY_HOST].strip()
             try:
                 await self._async_trigger_pairing(self._client)
-            except (VeluxActiveCannotConnect, VeluxPairingError):
+            except (VeluxActiveCannotConnect, VeluxPairingError) as err:
+                LOGGER.warning("Failed to start VELUX gateway pairing: %s", err)
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error starting Velux Active pairing")
@@ -207,7 +209,8 @@ class VeluxActiveConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 signing_key = await self._async_retrieve_pairing_key(self._pair_gateway_host)
-            except VeluxPairingError:
+            except VeluxPairingError as err:
+                LOGGER.warning("VELUX gateway pairing failed: %s", err)
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error during Velux Active pairing")
@@ -367,7 +370,8 @@ class VeluxActiveOptionsFlow(OptionsFlow):
                 self._pair_gateway_choices = _get_gateway_choices(
                     await client.async_get_raw_homesdata()
                 )
-            except (VeluxActiveCannotConnect, VeluxPairingError):
+            except (VeluxActiveCannotConnect, VeluxPairingError) as err:
+                LOGGER.warning("Failed to load VELUX gateways for pairing: %s", err)
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error loading Velux Active options gateways")
@@ -406,7 +410,8 @@ class VeluxActiveOptionsFlow(OptionsFlow):
             )
             try:
                 await self._async_trigger_pairing(client)
-            except (VeluxActiveCannotConnect, VeluxPairingError):
+            except (VeluxActiveCannotConnect, VeluxPairingError) as err:
+                LOGGER.warning("Failed to start VELUX gateway pairing: %s", err)
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error starting Velux Active options pairing")
@@ -429,7 +434,8 @@ class VeluxActiveOptionsFlow(OptionsFlow):
         if user_input is not None:
             try:
                 signing_key = await self._async_retrieve_pairing_key(self._pair_gateway_host)
-            except VeluxPairingError:
+            except VeluxPairingError as err:
+                LOGGER.warning("VELUX gateway pairing failed: %s", err)
                 errors["base"] = "pairing_failed"
             except Exception:
                 LOGGER.exception("Unexpected error during Velux Active options pairing")

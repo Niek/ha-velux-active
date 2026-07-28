@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+import logging
 import socket
 import struct
 import time
 import uuid
+from dataclasses import dataclass
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+_LOGGER = logging.getLogger(__name__)
 
 FRAME_PING = 0x0000
 FRAME_PONG = 0x0001
@@ -104,31 +107,55 @@ def retrieve_signing_key(
     """Wait for the local Netcom listener and retrieve a signing key."""
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
+    attempt = 0
+
+    _LOGGER.debug(
+        "Waiting for VELUX gateway pairing listener at %s:%d", host, NETCOM_PORT
+    )
 
     while time.monotonic() < deadline:
         try:
             if _tcp_open(host, NETCOM_PORT):
+                attempt += 1
+                _LOGGER.debug(
+                    "VELUX gateway pairing listener is available; starting attempt %d",
+                    attempt,
+                )
                 return _request_signing_key(host, NETCOM_PORT, socket_timeout)
-        except Exception as err:  # noqa: BLE001 - keep trying until timeout
+        except Exception as err:
+            # Keep retrying until the pairing deadline.
             last_error = err
+            _LOGGER.debug(
+                "VELUX gateway pairing attempt %d failed: %s: %s",
+                attempt,
+                type(err).__name__,
+                err,
+                exc_info=True,
+            )
         time.sleep(1)
 
     if last_error:
-        raise VeluxPairingError(str(last_error)) from last_error
+        detail = str(last_error) or type(last_error).__name__
+        raise VeluxPairingError(detail) from last_error
     raise VeluxPairingError(f"Local Netcom listener did not appear on {host}")
 
 
 def _request_signing_key(host: str, port: int, timeout: float) -> SigningKey:
     key_id = uuid.uuid4().bytes
     sock = _NetcomSocket(host, port, timeout)
+    _LOGGER.debug("Connected to VELUX gateway pairing listener")
     try:
         secure = _perform_ecdh(sock)
+        _LOGGER.debug("VELUX gateway ECDH handshake completed")
         gateway_key = _request_end_to_end_key(sock, secure, key_id)
+        _LOGGER.debug("VELUX gateway accepted signing key request")
         _verify_end_to_end_key(sock, secure, key_id, gateway_key)
+        _LOGGER.debug("VELUX gateway signing key challenge verified")
         _close_netcom(sock, secure)
     finally:
         sock.close()
 
+    _LOGGER.debug("VELUX gateway pairing completed successfully")
     return SigningKey(_b64(key_id), _b64(gateway_key))
 
 

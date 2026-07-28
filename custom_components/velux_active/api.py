@@ -305,6 +305,7 @@ class VeluxActiveClient:
 
     async def async_trigger_retrieve_key(self, home_id: str, gateway_id: str) -> None:
         """Ask the gateway to open its temporary local key retrieval listener."""
+        LOGGER.debug("Requesting VELUX gateway key retrieval mode")
         response = await self._auth.async_post_api_request(
             endpoint=SETSTATE_ENDPOINT,
             params={
@@ -323,6 +324,7 @@ class VeluxActiveClient:
         message = retrieve_key_error(response.ok, response.status, raw)
         if message:
             raise VeluxActiveCannotConnect(f"VELUX {message}")
+        LOGGER.debug("VELUX gateway accepted key retrieval request")
 
     async def async_reauthenticate(self) -> None:
         """Force a fresh password login and store the new tokens."""

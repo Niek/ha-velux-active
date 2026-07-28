@@ -8,7 +8,7 @@
     "error": {
       "cannot_connect": "Failed to connect to the Velux Active service.",
       "invalid_auth": "Invalid email or password.",
-      "pairing_failed": "Gateway pairing failed. Make sure Home Assistant is on the same network as the gateway. If the gateway LED is flashing, press the gateway button and try the key retrieval step again.",
+      "pairing_failed": "Gateway pairing failed. Make sure Home Assistant is on the same network as the gateway. If the gateway LED is flashing, press the gateway button and try the key retrieval step again. If pairing continues to fail, power-cycle the gateway and retry.",
       "unknown": "Unexpected error."
     },
     "step": {
@@ -67,7 +67,7 @@
   },
   "options": {
     "error": {
-      "pairing_failed": "Gateway pairing failed. Make sure Home Assistant is on the same network as the gateway. If the gateway LED is flashing, press the gateway button and try the key retrieval step again.",
+      "pairing_failed": "Gateway pairing failed. Make sure Home Assistant is on the same network as the gateway. If the gateway LED is flashing, press the gateway button and try the key retrieval step again. If pairing continues to fail, power-cycle the gateway and retry.",
       "unknown": "Unexpected error."
     },
     "step": {
