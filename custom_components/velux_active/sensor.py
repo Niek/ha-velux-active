@@ -27,6 +27,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONTROL_URL, DOMAIN, MANUFACTURER
 from .coordinator import VeluxActiveConfigEntry, VeluxActiveDataUpdateCoordinator
 
+FOOT_CANDLES_TO_LUX = 10.764
+
 
 @dataclass(frozen=True, kw_only=True)
 class VeluxRoomSensorDescription(SensorEntityDescription):
@@ -42,6 +44,18 @@ def _tenths_to_celsius(room: dict[str, Any]) -> float | None:
 def _tenths_value_to_celsius(value: Any) -> float | None:
     """Convert a VELUX tenths-of-degree value to Celsius."""
     return value / 10 if isinstance(value, (int, float)) else None
+
+
+def _velux_illuminance_to_lux(room: dict[str, Any]) -> float | None:
+    value = room.get("lux")
+    if not isinstance(value, (int, float)):
+        return None
+
+    # IMPORTANT: Although the API calls this field "lux", observed values appear
+    # to be foot-candles. VELUX and the APK do not confirm that unit, so this
+    # conversion is based on field measurements reported here:
+    # https://github.com/Niek/ha-velux-active/issues/22
+    return value * FOOT_CANDLES_TO_LUX
 
 
 ROOM_SENSORS: tuple[VeluxRoomSensorDescription, ...] = (
@@ -75,7 +89,7 @@ ROOM_SENSORS: tuple[VeluxRoomSensorDescription, ...] = (
         device_class=SensorDeviceClass.ILLUMINANCE,
         native_unit_of_measurement=LIGHT_LUX,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda room: room.get("lux"),
+        value_fn=_velux_illuminance_to_lux,
     ),
     VeluxRoomSensorDescription(
         key="air_quality",
