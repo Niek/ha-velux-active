@@ -21,10 +21,14 @@ async def async_setup_entry(
     entry: VeluxActiveConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up one connectivity sensor per VELUX gateway."""
+    """Set up binary sensors for each VELUX gateway."""
     coordinator = entry.runtime_data
     async_add_entities(
         VeluxGatewayConnectivityBinarySensor(coordinator, gateway_id)
+        for gateway_id in coordinator.data.gateway_connectivity
+    )
+    async_add_entities(
+        VeluxGatewayRainBinarySensor(coordinator, gateway_id)
         for gateway_id in coordinator.data.gateway_connectivity
     )
 
@@ -63,3 +67,54 @@ class VeluxGatewayConnectivityBinarySensor(
     def is_on(self) -> bool | None:
         """Return whether the gateway is connected."""
         return self.coordinator.data.gateway_connectivity.get(self._gateway_id)
+
+
+class VeluxGatewayRainBinarySensor(
+    CoordinatorEntity[VeluxActiveDataUpdateCoordinator], BinarySensorEntity
+):
+    """Rain state reported by a VELUX gateway."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Reported rain"
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: VeluxActiveDataUpdateCoordinator,
+        gateway_id: str,
+    ) -> None:
+        """Initialize the reported-rain sensor."""
+        super().__init__(coordinator)
+        self._gateway_id = gateway_id
+        self._attr_unique_id = f"{gateway_id}_rain"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Attach to the gateway device."""
+        return DeviceInfo(
+            configuration_url=CONTROL_URL,
+            identifiers={(DOMAIN, self._gateway_id)},
+            manufacturer=MANUFACTURER,
+            model="Gateway",
+            name="VELUX Gateway",
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether the gateway currently reports rain."""
+        for home in self.coordinator.data.homes.values():
+            gateway = home.modules.get(self._gateway_id)
+            if gateway is not None:
+                return getattr(gateway, "is_raining", None)
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return whether current rain state is available."""
+        return (
+            super().available
+            and self.coordinator.data.gateway_connectivity.get(self._gateway_id) is True
+            and self.is_on is not None
+        )

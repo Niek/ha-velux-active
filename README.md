@@ -79,11 +79,18 @@ After setup, the integration creates entities for supported devices:
 - **Roof windows**: `switch.window_name_auto_ventilation` - enable or disable automatic ventilation.
 - **Roller shutters / awning blinds**: `cover.blind_name` - open, close, set position, stop.
 - **Gateway**: `lock.velux_gateway_departure_mode` - lock (away) or unlock (home) departure mode.
-- **Gateway**: diagnostic connectivity binary sensor.
+- **Gateway**: diagnostic connectivity and reported-rain binary sensors. The
+  reported-rain entity is disabled by default.
 - **Rooms with climate data**: temperature, CO2, humidity, illuminance, and air-quality-index sensors.
 - **NXS/NXD modules**: diagnostic battery sensor with battery state and RF attributes.
 
 Roof-window movement requires signing keys. Roller shutters, awning blinds, and the auto-ventilation switch work without signing keys.
+
+The reported-rain entity mirrors the gateway state exposed by pyatmo. That value
+can be significantly delayed or stale, so treat it as informational rather than
+as a safety sensor. The entity is unavailable while the gateway is unreachable
+or until pyatmo reports a rain value. Enable it manually in the Home Assistant
+entity registry if useful.
 
 Signed roof-window commands always include the VELUX rain override so they do not depend on the reported-rain state being current. During rain, VELUX limits openings to 50% and closes them after at most 15 minutes.
 
