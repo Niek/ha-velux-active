@@ -408,6 +408,9 @@ def _extract_climate_status(
     raw_status_by_home_id: Mapping[str, dict[str, Any]],
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Extract VELUX room measurements and battery modules from raw homestatus."""
+    # TODO: Replace this raw-payload compatibility parser with pyatmo Room and
+    # NXS/NXD data once Home Assistant ships a pyatmo release containing
+    # https://github.com/jabesq-org/pyatmo/pull/634.
     rooms: dict[str, dict[str, Any]] = {}
     sensor_modules: dict[str, dict[str, Any]] = {}
 
