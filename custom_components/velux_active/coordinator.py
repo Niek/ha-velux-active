@@ -127,13 +127,13 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
                     _FAILURE_THRESHOLD,
                     err or type(err).__name__,
                 )
+                return previous_data
             else:
                 LOGGER.warning(
                     "Velux Active update failed %d times in a row: %s",
                     self._consecutive_failures,
                     err or type(err).__name__,
                 )
-            return previous_data
 
         raise UpdateFailed(
             f"Error communicating with VELUX ACTIVE: {err or type(err).__name__}"

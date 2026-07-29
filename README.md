@@ -79,6 +79,7 @@ After setup, the integration creates entities for supported devices:
 - **Roof windows**: `switch.window_name_auto_ventilation` - enable or disable automatic ventilation.
 - **Roller shutters / awning blinds**: `cover.blind_name` - open, close, set position, stop.
 - **Gateway**: `lock.velux_gateway_departure_mode` - lock (away) or unlock (home) departure mode.
+- **Gateway**: diagnostic connectivity binary sensor.
 - **Rooms with climate data**: temperature, CO2, humidity, illuminance, and air-quality-index sensors.
 - **NXS/NXD modules**: diagnostic battery sensor with battery state and RF attributes.
 

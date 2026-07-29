@@ -20,7 +20,7 @@ from pyatmo.const import (
     SETSTATE_ENDPOINT,
 )
 from pyatmo.enums import ScheduleType
-from pyatmo.exceptions import NoDeviceError
+from pyatmo.exceptions import ApiHomeReachabilityError, NoDeviceError
 from pyatmo.helpers import extract_raw_data
 from pyatmo.home import Home
 from pyatmo.modules import NXO
@@ -90,11 +90,13 @@ class VeluxActiveData:
     user: str | None
     homes: dict[str, Home]
     covers: dict[str, Any]
+    gateway_connectivity: dict[str, bool | None]
     rooms: dict[str, dict[str, Any]]
     sensor_modules: dict[str, dict[str, Any]]
 
 
 BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
+DEVICE_UNREACHABLE_ERROR_CODE = 6
 ROOM_MEASUREMENT_KEYS = frozenset(
     {"temperature", "co2", "humidity", "lux", "air_quality"}
 )
@@ -358,12 +360,23 @@ class VeluxActiveClient:
                 home.name,
                 len(home.modules),
             )
+            raw_status: dict[str, Any] | None = None
             try:
                 raw_status = await self.async_get_raw_homestatus(home_id)
+                raw_status_by_home_id[home_id] = raw_status
                 raw_data = extract_raw_data(raw_status, HOME)
                 await home.update(raw_data, do_raise_for_reachability_error=True)
-                raw_status_by_home_id[home_id] = raw_status
-            except NoDeviceError as err:
+            except (ApiHomeReachabilityError, NoDeviceError) as err:
+                if isinstance(err, ApiHomeReachabilityError):
+                    connectivity = (
+                        _extract_gateway_connectivity(
+                            {home_id: home}, {home_id: raw_status}
+                        )
+                        if raw_status is not None
+                        else {}
+                    )
+                    if False not in connectivity.values():
+                        raise
                 LOGGER.warning(
                     "Keeping VELUX Active home with topology-only data because "
                     "status data is unavailable: "
@@ -389,11 +402,15 @@ class VeluxActiveClient:
         rooms, sensor_modules = _extract_climate_status(
             self._account.homes, raw_status_by_home_id
         )
+        gateway_connectivity = _extract_gateway_connectivity(
+            self._account.homes, raw_status_by_home_id
+        )
 
         return VeluxActiveData(
             user=self._account.user,
             homes=dict(self._account.homes),
             covers=covers,
+            gateway_connectivity=gateway_connectivity,
             rooms=rooms,
             sensor_modules=sensor_modules,
         )
@@ -401,6 +418,47 @@ class VeluxActiveClient:
     @property
     def tokens(self) -> OAuthTokens | None:
         return self._auth.tokens
+
+
+def _extract_gateway_connectivity(
+    homes: Mapping[str, Home],
+    raw_status_by_home_id: Mapping[str, dict[str, Any]],
+) -> dict[str, bool | None]:
+    """Extract per-gateway connectivity from raw homestatus responses."""
+    connectivity: dict[str, bool | None] = {}
+
+    for home_id, home in homes.items():
+        raw_status = raw_status_by_home_id.get(home_id, {})
+        body = raw_status.get("body")
+        raw_home = _raw_status_home(raw_status)
+        raw_modules = raw_home.get("modules")
+        if not isinstance(raw_modules, list):
+            raw_modules = []
+        errors = body.get("errors") if isinstance(body, Mapping) else None
+        if not isinstance(errors, list):
+            errors = []
+
+        for gateway_id, module in home.modules.items():
+            if type(module).__name__ != "NXG":
+                continue
+
+            if any(
+                isinstance(error, Mapping)
+                and error.get("code") == DEVICE_UNREACHABLE_ERROR_CODE
+                and error.get("id") == gateway_id
+                for error in errors
+            ):
+                connectivity[gateway_id] = False
+            elif any(
+                isinstance(raw_module, Mapping)
+                and raw_module.get("id") == gateway_id
+                for raw_module in raw_modules
+            ):
+                connectivity[gateway_id] = True
+            else:
+                connectivity[gateway_id] = None
+
+    return connectivity
 
 
 def _extract_climate_status(
