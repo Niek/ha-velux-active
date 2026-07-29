@@ -76,6 +76,16 @@ def resolve_bridge_id(module_bridge: str | None, nxg_ids: list[str]) -> str | No
     return None
 
 
+def should_force_rain_override(
+    is_raining: bool | None,
+    current_position: int | None,
+    target_position: int,
+) -> bool:
+    """Return whether a rainy roof-window opening needs the API override."""
+    current_position = current_position if current_position is not None else 0
+    return is_raining is True and target_position > current_position
+
+
 def build_signed_modules(
     commands: list[dict],
     timestamp: int,
@@ -86,13 +96,14 @@ def build_signed_modules(
 ) -> list[dict]:
     """Build the signed per-window module payloads for a setstate batch.
 
-    Each command is {"id": module_id, "position": raw_position}; nonces are
-    assigned sequentially from base_nonce.
+    Each command is {"id": module_id, "position": raw_position} with an
+    optional true "force" flag; nonces are assigned sequentially from
+    base_nonce.
     """
     modules = []
     for offset, cmd in enumerate(commands):
         nonce = base_nonce + offset
-        modules.append({
+        module = {
             "id": cmd["id"],
             "nonce": nonce,
             "bridge": bridge_id,
@@ -102,7 +113,10 @@ def build_signed_modules(
                 hash_sign_key, cmd["position"], timestamp, nonce, cmd["id"]
             ),
             "timestamp": timestamp,
-        })
+        }
+        if cmd.get("force"):
+            module["force"] = True
+        modules.append(module)
     return modules
 
 

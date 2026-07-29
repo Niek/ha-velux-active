@@ -90,6 +90,14 @@ async def test_nonces_never_collide_across_two_sends_in_same_second():
     assert len(set(pairs)) == len(pairs), pairs
 
 
+async def test_force_flag_propagates_to_module_payload():
+    session = _Session()
+    m = _mgr(session, _token)
+    await asyncio.wait_for(m.queue("m1", 50, force=True), timeout=2)
+    module = session.payloads[0]["home"]["modules"][0]
+    assert module["force"] is True
+
+
 async def test_body_errors_propagate_as_batch_error():
     session = _Session(_Resp(text='{"body":{"errors":[{"code":28}]}}'))
     m = _mgr(session, _token)
