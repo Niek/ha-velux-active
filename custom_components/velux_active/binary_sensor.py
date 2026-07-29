@@ -12,8 +12,8 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONTROL_URL, DOMAIN, MANUFACTURER
 from .coordinator import VeluxActiveConfigEntry, VeluxActiveDataUpdateCoordinator
+from .entity import gateway_device_info
 
 
 async def async_setup_entry(
@@ -55,13 +55,7 @@ class VeluxGatewayConnectivityBinarySensor(
     @property
     def device_info(self) -> DeviceInfo:
         """Attach to the gateway device."""
-        return DeviceInfo(
-            configuration_url=CONTROL_URL,
-            identifiers={(DOMAIN, self._gateway_id)},
-            manufacturer=MANUFACTURER,
-            model="Gateway",
-            name="VELUX Gateway",
-        )
+        return gateway_device_info(self._gateway_id)
 
     @property
     def is_on(self) -> bool | None:
@@ -93,13 +87,7 @@ class VeluxGatewayRainBinarySensor(
     @property
     def device_info(self) -> DeviceInfo:
         """Attach to the gateway device."""
-        return DeviceInfo(
-            configuration_url=CONTROL_URL,
-            identifiers={(DOMAIN, self._gateway_id)},
-            manufacturer=MANUFACTURER,
-            model="Gateway",
-            name="VELUX Gateway",
-        )
+        return gateway_device_info(self._gateway_id)
 
     @property
     def is_on(self) -> bool | None:

@@ -1,19 +1,6 @@
-"""Standalone checks for VELUX raw homestatus parsing.
+"""Tests for VELUX raw homestatus parsing."""
 
-Run: uv run --with aiohttp --with pyatmo==9.4.0 python tests/test_api_climate_status.py
-"""
-
-import sys
-import types
-from pathlib import Path
-
-# Bootstrap a stub package so api.py's relative imports resolve without HA.
-_PKG = Path(__file__).resolve().parents[1] / "custom_components" / "velux_active"
-_pkg = types.ModuleType("velux_active")
-_pkg.__path__ = [str(_PKG)]
-sys.modules.setdefault("velux_active", _pkg)
-
-from velux_active.api import _extract_climate_status  # noqa: E402
+from velux_active.api import _extract_climate_status
 
 
 class FakeRoom:
@@ -149,11 +136,3 @@ def test_extract_climate_status_keeps_room_measurements_without_nxs_module():
     assert rooms["HOME_1:room1"]["temperature"] == 275
     assert set(sensor_modules) == {"nxd1"}
     assert "temperature" not in sensor_modules["nxd1"]
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_"):
-            fn()
-            print(f"ok {name}")
-    print("all passed")

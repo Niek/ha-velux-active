@@ -1,17 +1,8 @@
-"""Standalone checks for client.py raw status serialization.
-
-Run: uv run --with aiohttp --with cryptography --with pyatmo==9.4.0 python tests/test_client_status_serialization.py
-"""
-
-import asyncio
-import sys
-from pathlib import Path
+"""Tests for client.py raw status serialization."""
 
 from pyatmo.const import HOME
 from pyatmo.helpers import extract_raw_data
 from pyatmo.home import Home
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import client
 
@@ -86,6 +77,12 @@ HOMESTATUS = {
             ],
             "modules": [
                 {
+                    "id": "gateway1",
+                    "type": "NXG",
+                    "wifi_state": "full",
+                    "wifi_strength": 46,
+                },
+                {
                     "id": "nxs1",
                     "type": "NXS",
                     "battery_level": 3908,
@@ -114,11 +111,14 @@ HOMESTATUS = {
 }
 
 
-def test_serialize_home_includes_room_measurements_and_module_batteries():
+async def test_serialize_home_includes_room_measurements_and_module_batteries():
     home = Home(None, HOME_TOPOLOGY)
-    asyncio.run(home.update(extract_raw_data(HOMESTATUS, HOME)))
+    await home.update(extract_raw_data(HOMESTATUS, HOME))
 
     serialized = client.serialize_home(home, HOMESTATUS)
+
+    gateway = next(item for item in serialized["modules"] if item["id"] == "gateway1")
+    assert gateway["reachable"] is True
 
     room = next(item for item in serialized["rooms"] if item["id"] == "room1")
     assert room["temperature"] == 275
@@ -149,11 +149,3 @@ def test_serialize_home_includes_room_measurements_and_module_batteries():
     nxo = next(item for item in serialized["modules"] if item["id"] == "nxo1")
     assert "api_type" not in nxo
     assert "battery_percent" not in nxo
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_"):
-            fn()
-            print(f"ok {name}")
-    print("all passed")

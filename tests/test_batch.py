@@ -1,17 +1,9 @@
-"""Async checks for the batch sender. Run: python3 tests/test_batch.py"""
+"""Tests for the asynchronous batch sender."""
 
 import asyncio
-import sys
-import types
-from pathlib import Path
 
-# Bootstrap a stub package so batch.py's relative imports resolve without HA.
-_PKG = Path(__file__).resolve().parents[1] / "custom_components" / "velux_active"
-_pkg = types.ModuleType("velux_active")
-_pkg.__path__ = [str(_PKG)]
-sys.modules.setdefault("velux_active", _pkg)
-
-from velux_active import batch  # noqa: E402
+import pytest
+from velux_active import batch
 
 KEY = "AAAAAAAAAAAAAAAAAAAAAA=="
 
@@ -70,8 +62,8 @@ async def test_command_queued_during_inflight_send_is_not_stranded():
 
     m = _mgr(session, slow_token)
     f1 = m.queue("m1", 100)
-    await asyncio.sleep(0.16)   # first _send_batch is now blocked on slow_token
-    f2 = m.queue("m2", 50)      # queued while the send is in flight
+    await asyncio.sleep(0.16)  # first _send_batch is now blocked on slow_token
+    f2 = m.queue("m2", 50)  # queued while the send is in flight
     gate.set()
     await asyncio.wait_for(asyncio.gather(f1, f2), timeout=2)  # both must resolve
     assert len(session.payloads) == 2
@@ -101,11 +93,8 @@ async def test_force_flag_is_always_in_module_payload():
 async def test_body_errors_propagate_as_batch_error():
     session = _Session(_Resp(text='{"body":{"errors":[{"code":28}]}}'))
     m = _mgr(session, _token)
-    try:
+    with pytest.raises(batch.BatchCommandError):
         await asyncio.wait_for(m.queue("m1", 100), timeout=2)
-    except batch.BatchCommandError:
-        return
-    raise AssertionError("expected BatchCommandError")
 
 
 async def test_invalid_signing_key_resolves_future_instead_of_hanging():
@@ -121,16 +110,5 @@ async def test_invalid_signing_key_resolves_future_instead_of_hanging():
         sign_key_id="kid",
         timezone="UTC",
     )
-    try:
+    with pytest.raises(batch.BatchCommandError):
         await asyncio.wait_for(m.queue("m1", 100), timeout=2)
-    except batch.BatchCommandError:
-        return
-    raise AssertionError("expected BatchCommandError")
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_"):
-            asyncio.run(fn())
-            print(f"ok {name}")
-    print("all passed")

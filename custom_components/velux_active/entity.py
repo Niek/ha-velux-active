@@ -71,7 +71,7 @@ class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
 
     def _get_home(self):
         """Return the pyatmo Home object that owns this module."""
-        for home in self.coordinator.client._account.homes.values():
+        for home in self.coordinator.data.homes.values():
             if self._module_id in home.modules:
                 return home
         return None
@@ -106,6 +106,17 @@ class VeluxActiveEntity(CoordinatorEntity[VeluxActiveDataUpdateCoordinator]):
             modules,
             action=action,
         )
+
+
+def gateway_device_info(gateway_id: str) -> DeviceInfo:
+    """Return shared metadata for a VELUX gateway device."""
+    return DeviceInfo(
+        configuration_url=CONTROL_URL,
+        identifiers={(DOMAIN, gateway_id)},
+        manufacturer=MANUFACTURER,
+        model="Gateway",
+        name="VELUX Gateway",
+    )
 
 
 async def async_post_setstate(

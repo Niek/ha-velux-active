@@ -66,7 +66,9 @@ class BatchCommandManager:
         """Queue a window command. Returns a Future resolved when the batch fires."""
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
-        self._pending.append({"id": module_id, "position": raw_position, "future": future})
+        self._pending.append(
+            {"id": module_id, "position": raw_position, "future": future}
+        )
 
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._fire_after_delay())
@@ -144,9 +146,15 @@ class BatchCommandManager:
                 else:
                     api_errors = json.loads(text).get("body", {}).get("errors", [])
                     if api_errors:
-                        error = BatchCommandError(f"Signed setstate errors: {api_errors}")
+                        error = BatchCommandError(
+                            f"Signed setstate errors: {api_errors}"
+                        )
         except Exception as err:
-            error = err if isinstance(err, BatchCommandError) else BatchCommandError(str(err))
+            error = (
+                err
+                if isinstance(err, BatchCommandError)
+                else BatchCommandError(str(err))
+            )
 
         for cmd in commands:
             future = cmd["future"]

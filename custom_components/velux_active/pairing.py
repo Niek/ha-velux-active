@@ -214,7 +214,9 @@ def _verify_end_to_end_key(
     sock: _NetcomSocket, secure: _SecureContext, key_id: bytes, gateway_key: bytes
 ) -> None:
     """Complete the gateway nonce/challenge check for the new signing key."""
-    sock.send(secure.encrypt_frame(_pack_frame(FRAME_END_TO_END_NONCE_REQUEST, b"\x00")))
+    sock.send(
+        secure.encrypt_frame(_pack_frame(FRAME_END_TO_END_NONCE_REQUEST, b"\x00"))
+    )
     nonce = _receive_secure_payload(
         sock, secure, FRAME_END_TO_END_NONCE_RESPONSE, "nonce response"
     )

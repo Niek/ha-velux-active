@@ -10,8 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .cover import _module_is_window
 from .coordinator import VeluxActiveConfigEntry, VeluxActiveDataUpdateCoordinator
+from .cover import _module_is_window
 from .entity import VeluxActiveEntity
 
 _LOGGER = logging.getLogger(__name__)

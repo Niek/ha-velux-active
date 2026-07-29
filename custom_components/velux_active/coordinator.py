@@ -9,10 +9,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-
 from pyatmo.exceptions import ApiError, ApiHomeReachabilityError
 
-from .api import VeluxActiveClient, VeluxActiveData, VeluxActiveCannotConnect, VeluxActiveInvalidAuth
+from .api import (
+    VeluxActiveCannotConnect,
+    VeluxActiveClient,
+    VeluxActiveData,
+    VeluxActiveInvalidAuth,
+)
 from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
@@ -94,7 +98,11 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
         except VeluxActiveInvalidAuth as err:
             raise ConfigEntryAuthFailed("Authentication failed") from err
 
-        except (VeluxActiveCannotConnect, ApiHomeReachabilityError, ApiError, TimeoutError) as err:
+        except (
+            VeluxActiveCannotConnect,
+            ApiHomeReachabilityError,
+            TimeoutError,
+        ) as err:
             return self._handle_update_error(err)
 
     async def _async_fetch_data(self) -> VeluxActiveData:
@@ -128,12 +136,11 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
                     err or type(err).__name__,
                 )
                 return previous_data
-            else:
-                LOGGER.warning(
-                    "Velux Active update failed %d times in a row: %s",
-                    self._consecutive_failures,
-                    err or type(err).__name__,
-                )
+            LOGGER.warning(
+                "Velux Active update failed %d times in a row: %s",
+                self._consecutive_failures,
+                err or type(err).__name__,
+            )
 
         raise UpdateFailed(
             f"Error communicating with VELUX ACTIVE: {err or type(err).__name__}"

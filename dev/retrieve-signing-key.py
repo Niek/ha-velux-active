@@ -16,9 +16,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
 
 # Bootstrap a lightweight package so the HA-free modules resolve their relative
 # imports without running the real __init__.py (which imports Home Assistant).
@@ -46,10 +46,12 @@ async def _run(args: argparse.Namespace) -> int:
     # Imported lazily so --help works without the integration's runtime deps.
     try:
         import aiohttp
-
         from velux_active import api, pairing
     except ImportError as err:
-        print(f"Missing dependency: {err}. Install pyatmo, aiohttp, cryptography.", file=sys.stderr)
+        print(
+            f"Missing dependency: {err}. Install pyatmo, aiohttp, cryptography.",
+            file=sys.stderr,
+        )
         return 2
 
     password = args.password or getpass.getpass("VELUX password: ")
@@ -76,7 +78,10 @@ async def _run(args: argparse.Namespace) -> int:
         elif len(gateways) == 1:
             home_id, gateway_id, label = gateways[0]
         else:
-            print("Multiple gateways found; pick one with --gateway <id>:", file=sys.stderr)
+            print(
+                "Multiple gateways found; pick one with --gateway <id>:",
+                file=sys.stderr,
+            )
             for _, gw_id, label in gateways:
                 print(f"  {gw_id}  {label}", file=sys.stderr)
             return 1
@@ -88,7 +93,9 @@ async def _run(args: argparse.Namespace) -> int:
             print(f"retrieve_key trigger failed: {err}", file=sys.stderr)
             return 1
 
-        input("Wait for the gateway LED to flash, press the gateway button, then Enter... ")
+        input(
+            "Wait for the gateway LED to flash, press the gateway button, then Enter... "
+        )
         try:
             key = await asyncio.to_thread(
                 pairing.retrieve_signing_key, host=args.host, timeout=args.timeout
@@ -107,7 +114,9 @@ def main() -> int:
     parser.add_argument("--username", required=True, help="VELUX ACTIVE account email")
     parser.add_argument("--password", help="Account password (prompted if omitted)")
     parser.add_argument("--host", required=True, help="Gateway IP address or hostname")
-    parser.add_argument("--gateway", help="Gateway module id (for multi-gateway accounts)")
+    parser.add_argument(
+        "--gateway", help="Gateway module id (for multi-gateway accounts)"
+    )
     parser.add_argument(
         "--timeout", default=30, type=int, help="Seconds to wait for the local listener"
     )

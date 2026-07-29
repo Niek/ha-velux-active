@@ -1,111 +1,8 @@
-"""Standalone checks for VELUX gateway binary sensors.
+"""Tests for VELUX gateway binary sensors."""
 
-Run: python3 tests/test_binary_sensor.py
-"""
-
-import asyncio
-import importlib.util
-import sys
-import types
-from pathlib import Path
-
-
-class CoordinatorEntity:
-    @classmethod
-    def __class_getitem__(cls, item):
-        return cls
-
-    def __init__(self, coordinator):
-        self.coordinator = coordinator
-
-    @property
-    def available(self):
-        return True
-
-
-class BinarySensorEntity:
-    pass
-
-
-class BinarySensorDeviceClass:
-    CONNECTIVITY = "connectivity"
-    MOISTURE = "moisture"
-
-
-class EntityCategory:
-    DIAGNOSTIC = "diagnostic"
-
-
-class DeviceInfo(dict):
-    def __init__(self, **kwargs):
-        super().__init__(kwargs)
-
-
-def _load_binary_sensor_module():
-    modules = {
-        "homeassistant": types.ModuleType("homeassistant"),
-        "homeassistant.components": types.ModuleType("homeassistant.components"),
-        "homeassistant.components.binary_sensor": types.ModuleType(
-            "homeassistant.components.binary_sensor"
-        ),
-        "homeassistant.const": types.ModuleType("homeassistant.const"),
-        "homeassistant.core": types.ModuleType("homeassistant.core"),
-        "homeassistant.helpers": types.ModuleType("homeassistant.helpers"),
-        "homeassistant.helpers.device_registry": types.ModuleType(
-            "homeassistant.helpers.device_registry"
-        ),
-        "homeassistant.helpers.entity_platform": types.ModuleType(
-            "homeassistant.helpers.entity_platform"
-        ),
-        "homeassistant.helpers.update_coordinator": types.ModuleType(
-            "homeassistant.helpers.update_coordinator"
-        ),
-    }
-    modules[
-        "homeassistant.components.binary_sensor"
-    ].BinarySensorDeviceClass = BinarySensorDeviceClass
-    modules[
-        "homeassistant.components.binary_sensor"
-    ].BinarySensorEntity = BinarySensorEntity
-    modules["homeassistant.const"].EntityCategory = EntityCategory
-    modules["homeassistant.core"].HomeAssistant = object
-    modules["homeassistant.helpers.device_registry"].DeviceInfo = DeviceInfo
-    modules[
-        "homeassistant.helpers.entity_platform"
-    ].AddConfigEntryEntitiesCallback = object
-    modules[
-        "homeassistant.helpers.update_coordinator"
-    ].CoordinatorEntity = CoordinatorEntity
-    sys.modules.update(modules)
-
-    package_path = (
-        Path(__file__).resolve().parents[1] / "custom_components" / "velux_active"
-    )
-    package = types.ModuleType("velux_active")
-    package.__path__ = [str(package_path)]
-    sys.modules["velux_active"] = package
-
-    const = types.ModuleType("velux_active.const")
-    const.CONTROL_URL = "https://example.invalid"
-    const.DOMAIN = "velux_active"
-    const.MANUFACTURER = "VELUX"
-    sys.modules["velux_active.const"] = const
-
-    coordinator = types.ModuleType("velux_active.coordinator")
-    coordinator.VeluxActiveConfigEntry = object
-    coordinator.VeluxActiveDataUpdateCoordinator = object
-    sys.modules["velux_active.coordinator"] = coordinator
-
-    spec = importlib.util.spec_from_file_location(
-        "velux_active.binary_sensor", package_path / "binary_sensor.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-binary_sensor = _load_binary_sensor_module()
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.const import EntityCategory
+from velux_active import binary_sensor
 
 
 class FakeGateway:
@@ -141,13 +38,13 @@ class FakeEntry:
         self.runtime_data = FakeCoordinator()
 
 
-def test_setup_registers_both_sensors_for_each_gateway():
+async def test_setup_registers_both_sensors_for_each_gateway():
     entities = []
 
     def add_entities(new_entities):
         entities.extend(new_entities)
 
-    asyncio.run(binary_sensor.async_setup_entry(None, FakeEntry(), add_entities))
+    await binary_sensor.async_setup_entry(None, FakeEntry(), add_entities)
 
     assert len(entities) == 4
     rain_entities = [
@@ -189,9 +86,12 @@ def test_rain_sensor_uses_pyatmo_state_and_gateway_availability():
     assert not sensor.available
 
 
-if __name__ == "__main__":
-    for name, function in sorted(globals().items()):
-        if name.startswith("test_"):
-            function()
-            print(f"ok {name}")
-    print("all passed")
+def test_gateway_sensors_share_device_metadata():
+    coordinator = FakeCoordinator()
+    connectivity = binary_sensor.VeluxGatewayConnectivityBinarySensor(
+        coordinator, "gateway1"
+    )
+    rain = binary_sensor.VeluxGatewayRainBinarySensor(coordinator, "gateway1")
+
+    assert connectivity.device_info == rain.device_info
+    assert connectivity.device_info["identifiers"] == {("velux_active", "gateway1")}

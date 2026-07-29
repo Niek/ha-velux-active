@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
 import json
-from json import JSONDecodeError
 import time
-from typing import Any, Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from json import JSONDecodeError
+from typing import Any
 
 import aiohttp
 from pyatmo.account import AsyncAccount
@@ -25,6 +25,7 @@ from pyatmo.helpers import extract_raw_data
 from pyatmo.home import Home
 from pyatmo.modules import NXO
 
+from .connectivity import gateway_reachable
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_REFRESH_TOKEN,
@@ -96,7 +97,6 @@ class VeluxActiveData:
 
 
 BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
-DEVICE_UNREACHABLE_ERROR_CODE = 6
 ROOM_MEASUREMENT_KEYS = frozenset(
     {"temperature", "co2", "humidity", "lux", "air_quality"}
 )
@@ -119,7 +119,11 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         self._tokens: OAuthTokens | None = initial_tokens
 
     async def async_get_access_token(self) -> str:
-        if self._tokens and self._tokens.access_token and self._is_token_valid(self._tokens):
+        if (
+            self._tokens
+            and self._tokens.access_token
+            and self._is_token_valid(self._tokens)
+        ):
             return self._tokens.access_token
 
         if self._tokens and self._tokens.refresh_token:
@@ -230,7 +234,9 @@ class VeluxActiveAuth(AbstractAsyncAuth):
 
         tokens = OAuthTokens(
             access_token=str(raw["access_token"]),
-            refresh_token=str(raw["refresh_token"]) if raw.get("refresh_token") else None,
+            refresh_token=str(raw["refresh_token"])
+            if raw.get("refresh_token")
+            else None,
             expires_at=expires_at,
         )
 
@@ -260,9 +266,8 @@ def _is_cover_module(module: Any) -> bool:
     """
     if isinstance(module, NXO):
         return True
-    return (
-        hasattr(module, "current_position")
-        and hasattr(module, "async_set_target_position")
+    return hasattr(module, "current_position") and hasattr(
+        module, "async_set_target_position"
     )
 
 
@@ -284,17 +289,17 @@ class VeluxActiveClient:
             token_updated=token_updated,
         )
         self._account = AsyncAccount(self._auth)
-        self._username = username
 
-    async def async_validate(self) -> str:
+    async def async_validate(self) -> None:
+        """Validate credentials by loading account topology and status."""
         await self.async_setup()  # Load topology first
-        data = await self.async_update()
-        home_names = [home.name for home in data.homes.values()]
-        return home_names[0] if len(home_names) == 1 else self._username
+        await self.async_update()
 
     async def async_get_raw_homesdata(self) -> dict[str, Any]:
         """Return raw homesdata from the Velux API."""
-        response = await self._auth.async_post_api_request(endpoint=GETHOMESDATA_ENDPOINT)
+        response = await self._auth.async_post_api_request(
+            endpoint=GETHOMESDATA_ENDPOINT
+        )
         return await response.json()
 
     async def async_get_raw_homestatus(self, home_id: str) -> dict[str, Any]:
@@ -429,34 +434,10 @@ def _extract_gateway_connectivity(
 
     for home_id, home in homes.items():
         raw_status = raw_status_by_home_id.get(home_id, {})
-        body = raw_status.get("body")
-        raw_home = _raw_status_home(raw_status)
-        raw_modules = raw_home.get("modules")
-        if not isinstance(raw_modules, list):
-            raw_modules = []
-        errors = body.get("errors") if isinstance(body, Mapping) else None
-        if not isinstance(errors, list):
-            errors = []
-
         for gateway_id, module in home.modules.items():
             if type(module).__name__ != "NXG":
                 continue
-
-            if any(
-                isinstance(error, Mapping)
-                and error.get("code") == DEVICE_UNREACHABLE_ERROR_CODE
-                and error.get("id") == gateway_id
-                for error in errors
-            ):
-                connectivity[gateway_id] = False
-            elif any(
-                isinstance(raw_module, Mapping)
-                and raw_module.get("id") == gateway_id
-                for raw_module in raw_modules
-            ):
-                connectivity[gateway_id] = True
-            else:
-                connectivity[gateway_id] = None
+            connectivity[gateway_id] = gateway_reachable(raw_status, gateway_id)
 
     return connectivity
 

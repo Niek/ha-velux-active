@@ -16,12 +16,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
 import sys
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
@@ -30,8 +30,9 @@ if str(VELUX_ACTIVE_SRC) not in sys.path:
     sys.path.insert(0, str(VELUX_ACTIVE_SRC))
 
 import aiohttp
-from pairing import SigningKey, retrieve_signing_key
 import pyatmo
+from connectivity import gateway_reachable
+from pairing import SigningKey, retrieve_signing_key
 from pyatmo.const import (
     AUTH_REQ_ENDPOINT,
     DEFAULT_BASE_URL,
@@ -918,7 +919,9 @@ async def send_sync_setstate(
         text = await response.text()
 
     if not text.strip():
-        raise RuntimeError(f"setstate returned empty response (status {response.status})")
+        raise RuntimeError(
+            f"setstate returned empty response (status {response.status})"
+        )
 
     try:
         raw: Any = json.loads(text)
@@ -1122,7 +1125,8 @@ def serialize_home(
 ) -> dict[str, Any]:
     """Serialize a home."""
 
-    raw_home = raw_status_home(raw_status or {})
+    raw_status = raw_status or {}
+    raw_home = raw_status_home(raw_status)
     raw_rooms = {
         room["id"]: room
         for room in raw_home.get("rooms") or []
@@ -1139,10 +1143,12 @@ def serialize_home(
             home.rooms.values(), key=lambda item: (item.name, item.entity_id)
         )
     ]
-    modules = [
-        serialize_module(home, module, raw_modules.get(module.entity_id))
-        for module in sorted(home.modules.values(), key=module_key)
-    ]
+    modules = []
+    for module in sorted(home.modules.values(), key=module_key):
+        serialized = serialize_module(home, module, raw_modules.get(module.entity_id))
+        if module.device_type == DeviceType.NXG:
+            serialized["reachable"] = gateway_reachable(raw_status, module.entity_id)
+        modules.append(serialized)
     return {"id": home.entity_id, "name": home.name, "rooms": rooms, "modules": modules}
 
 
@@ -1355,9 +1361,8 @@ def find_cover(
 def is_cover_module(module: pyatmo.Module) -> bool:
     """Return True for modules that support VELUX position control."""
 
-    return (
-        hasattr(module, "current_position")
-        and hasattr(module, "async_set_target_position")
+    return hasattr(module, "current_position") and hasattr(
+        module, "async_set_target_position"
     )
 
 

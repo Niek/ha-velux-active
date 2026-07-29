@@ -1,21 +1,7 @@
-"""Standalone checks for VELUX gateway connectivity parsing.
+"""Tests for VELUX gateway connectivity parsing."""
 
-Run: uv run --with aiohttp --with pyatmo==9.4.0 python tests/test_api_gateway_connectivity.py
-"""
-
-import asyncio
-import sys
-import types
-from pathlib import Path
-
+import pytest
 from pyatmo.exceptions import ApiHomeReachabilityError
-
-# Bootstrap a stub package so api.py's relative imports resolve without HA.
-_PKG = Path(__file__).resolve().parents[1] / "custom_components" / "velux_active"
-_pkg = types.ModuleType("velux_active")
-_pkg.__path__ = [str(_PKG)]
-sys.modules.setdefault("velux_active", _pkg)
-
 from velux_active.api import VeluxActiveClient, _extract_gateway_connectivity
 
 
@@ -113,7 +99,7 @@ def test_extract_gateway_connectivity_leaves_missing_status_unknown():
     assert connectivity == {"gateway1": None}
 
 
-def test_async_update_keeps_gateway_unreachable_status():
+async def test_async_update_keeps_gateway_unreachable_status():
     status = {
         "body": {
             "home": {"id": "home1"},
@@ -122,12 +108,12 @@ def test_async_update_keeps_gateway_unreachable_status():
     }
     client = _client_returning(status)
 
-    data = asyncio.run(client.async_update())
+    data = await client.async_update()
 
     assert data.gateway_connectivity == {"gateway1": False}
 
 
-def test_async_update_propagates_other_reachability_errors():
+async def test_async_update_propagates_other_reachability_errors():
     status = {
         "body": {
             "home": {"id": "home1"},
@@ -136,17 +122,5 @@ def test_async_update_propagates_other_reachability_errors():
     }
     client = _client_returning(status)
 
-    try:
-        asyncio.run(client.async_update())
-    except ApiHomeReachabilityError:
-        pass
-    else:
-        raise AssertionError("Non-gateway reachability error was suppressed")
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_"):
-            fn()
-            print(f"ok {name}")
-    print("all passed")
+    with pytest.raises(ApiHomeReachabilityError):
+        await client.async_update()

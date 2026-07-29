@@ -6,8 +6,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from pyatmo.exceptions import ApiError
-
 from homeassistant.components.cover import (
     ATTR_POSITION,
     CoverDeviceClass,
@@ -18,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from pyatmo.exceptions import ApiError
 
 from .batch import BatchCommandError, get_batch_manager
 from .const import (
@@ -107,28 +106,20 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         )
 
     # ------------------------------------------------------------------
-    # Position helpers
-    # ------------------------------------------------------------------
-
-    def _raw_to_ha_position(self, raw: int | None) -> int | None:
-        """Convert API position to HA position (0 = closed, 100 = open)."""
-        return raw
-
-    def _ha_to_raw_position(self, position: int) -> int:
-        """Convert HA position to API position."""
-        return position
-
-    # ------------------------------------------------------------------
     # CoverEntity properties
     # ------------------------------------------------------------------
 
     @property
     def device_class(self) -> CoverDeviceClass:
-        return CoverDeviceClass.WINDOW if self._is_window_device else CoverDeviceClass.SHUTTER
+        return (
+            CoverDeviceClass.WINDOW
+            if self._is_window_device
+            else CoverDeviceClass.SHUTTER
+        )
 
     @property
     def current_cover_position(self) -> int | None:
-        return self._raw_to_ha_position(self.module.current_position)
+        return self.module.current_position
 
     @property
     def is_closed(self) -> bool | None:
@@ -167,7 +158,6 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
     # ------------------------------------------------------------------
 
     async def _move_to_ha_position(self, ha_position: int) -> None:
-        raw_position = self._ha_to_raw_position(ha_position)
         if self._is_window_device and self._signing_enabled:
             home = self._get_home()
             bridge_id = self._get_bridge_id(home) if home is not None else None
@@ -195,7 +185,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                 timezone=self._get_timezone(),
             )
             try:
-                await batch.queue(self._module_id, raw_position)
+                await batch.queue(self._module_id, ha_position)
             except BatchCommandError as err:
                 raise HomeAssistantError(str(err)) from err
             self._set_motion_state(ha_position)
@@ -205,7 +195,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         else:
             await self._async_run_command(
                 self.module.async_set_target_position,
-                raw_position,
+                ha_position,
                 target_position=ha_position,
             )
 
@@ -219,9 +209,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         home = self._get_home()
         bridge_id = self._get_bridge_id(home) if home is not None else None
         if home is None or bridge_id is None:
-            raise HomeAssistantError(
-                "Could not find home or gateway for stop command"
-            )
+            raise HomeAssistantError("Could not find home or gateway for stop command")
 
         await self._async_setstate(
             home,

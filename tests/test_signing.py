@@ -1,14 +1,6 @@
-"""Standalone checks for the signing/nonce logic. Run: python3 tests/test_signing.py"""
+"""Tests for the signing and nonce logic."""
 
-import sys
-from pathlib import Path
-
-# Import signing.py directly — the package __init__ imports Home Assistant.
-sys.path.insert(
-    0, str(Path(__file__).resolve().parents[1] / "custom_components" / "velux_active")
-)
-
-from signing import (  # noqa: E402
+from velux_active.signing import (
     allocate_nonces,
     build_signed_modules,
     compute_hash,
@@ -24,7 +16,7 @@ def _emulate_batches(clock, batch_sizes):
     """Replay how cover.py allocates nonces and collect every (ts, nonce) pair."""
     last_ts, last_nonce = 0, -1
     pairs = []
-    for now, count in zip(clock, batch_sizes):
+    for now, count in zip(clock, batch_sizes, strict=True):
         ts, base = allocate_nonces(now, last_ts, last_nonce)
         pairs.extend((ts, base + i) for i in range(count))
         last_ts, last_nonce = ts, base + count - 1
@@ -56,7 +48,7 @@ def test_hash_is_deterministic_and_url_safe():
 
 def test_hash_changes_with_each_signed_field():
     base = compute_hash(KEY, 100, 12345, 0, "dev1")
-    assert compute_hash(KEY, 50, 12345, 0, "dev1") != base   # position
+    assert compute_hash(KEY, 50, 12345, 0, "dev1") != base  # position
     assert compute_hash(KEY, 100, 99999, 0, "dev1") != base  # timestamp
     assert compute_hash(KEY, 100, 12345, 1, "dev1") != base  # nonce
     assert compute_hash(KEY, 100, 12345, 0, "dev2") != base  # device
@@ -67,7 +59,7 @@ def test_resolve_bridge_prefers_module_link():
 
 
 def test_resolve_bridge_falls_back_only_when_unambiguous():
-    assert resolve_bridge_id(None, ["gwA"]) == "gwA"        # single gateway
+    assert resolve_bridge_id(None, ["gwA"]) == "gwA"  # single gateway
     assert resolve_bridge_id(None, ["gwA", "gwB"]) is None  # never guess
     assert resolve_bridge_id("stale", ["gwA", "gwB"]) is None
     assert resolve_bridge_id(None, []) is None
@@ -97,19 +89,13 @@ def test_scenario_hash_deterministic_urlsafe_and_field_sensitive():
 
 def test_scenario_hash_differs_from_position_hash():
     # Different message prefix -> must not collide with a window position hash.
-    assert compute_scenario_hash(KEY, "home", 1, 0, "x") != compute_hash(KEY, 0, 1, 0, "x")
+    assert compute_scenario_hash(KEY, "home", 1, 0, "x") != compute_hash(
+        KEY, 0, 1, 0, "x"
+    )
 
 
 def test_retrieve_key_error_flags_http_and_body_errors():
     assert retrieve_key_error(True, 200, {"body": {}}) is None
-    assert retrieve_key_error(False, 500, {}) is not None            # HTTP failure
+    assert retrieve_key_error(False, 500, {}) is not None  # HTTP failure
     assert retrieve_key_error(True, 200, {"body": {"errors": [1]}})  # 200 + body.errors
     assert retrieve_key_error(True, 200, "garbage") is None
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_"):
-            fn()
-            print(f"ok {name}")
-    print("all passed")

@@ -25,12 +25,9 @@ from .const import (
     CONF_HASH_SIGN_KEY,
     CONF_SIGN_KEY_GATEWAY_ID,
     CONF_SIGN_KEY_ID,
-    CONTROL_URL,
-    DOMAIN,
-    MANUFACTURER,
 )
 from .coordinator import VeluxActiveConfigEntry, VeluxActiveDataUpdateCoordinator
-from .entity import async_post_setstate
+from .entity import async_post_setstate, gateway_device_info
 from .signing import allocate_nonces, compute_scenario_hash
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def _iter_gateways(coordinator: VeluxActiveDataUpdateCoordinator):
     """Yield (home_id, bridge_id) for every NXG gateway across all homes."""
-    for home in coordinator.client._account.homes.values():
+    for home in coordinator.data.homes.values():
         for module_id, module in home.modules.items():
             if type(module).__name__ == "NXG":
                 yield home.entity_id, module_id
@@ -98,17 +95,11 @@ class VeluxDepartureLock(
     @property
     def device_info(self) -> DeviceInfo:
         """Attach to the gateway device."""
-        return DeviceInfo(
-            configuration_url=CONTROL_URL,
-            identifiers={(DOMAIN, self._bridge_id)},
-            manufacturer=MANUFACTURER,
-            model="Gateway",
-            name="VELUX Gateway",
-        )
+        return gateway_device_info(self._bridge_id)
 
     def _bridge_module(self):
         """Return the pyatmo NXG module for this lock's gateway, or None."""
-        for home in self.coordinator.client._account.homes.values():
+        for home in self.coordinator.data.homes.values():
             if home.entity_id == self._home_id:
                 return home.modules.get(self._bridge_id)
         return None
@@ -124,7 +115,9 @@ class VeluxDepartureLock(
 
     async def async_lock(self, **kwargs: Any) -> None:
         """Activate departure mode (away). No signing required."""
-        await self._async_scenario([{"id": self._bridge_id, "scenario": "away"}], "lock")
+        await self._async_scenario(
+            [{"id": self._bridge_id, "scenario": "away"}], "lock"
+        )
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Deactivate departure mode (home). Requires signing keys."""

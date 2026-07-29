@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
+from datetime import timedelta
 
 DOMAIN = "velux_active"
 MANUFACTURER = "VELUX"

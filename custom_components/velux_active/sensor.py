@@ -211,9 +211,7 @@ class VeluxRoomSensor(
         """Expose room comfort thresholds and VELUX algorithm diagnostics."""
         room = self._room
         attributes = {
-            key: room[key]
-            for key in ROOM_DIAGNOSTIC_ATTRIBUTES
-            if key in room
+            key: room[key] for key in ROOM_DIAGNOSTIC_ATTRIBUTES if key in room
         }
         for key in ROOM_TEMPERATURE_ATTRIBUTES:
             if key in room:
@@ -268,9 +266,7 @@ class VeluxModuleBatterySensor(
         """Expose battery and RF diagnostics."""
         module = self._module
         return {
-            key: module[key]
-            for key in MODULE_DIAGNOSTIC_ATTRIBUTES
-            if key in module
+            key: module[key] for key in MODULE_DIAGNOSTIC_ATTRIBUTES if key in module
         }
 
     @property
