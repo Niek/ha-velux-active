@@ -89,6 +89,7 @@ ROOM_SENSORS: tuple[VeluxRoomSensorDescription, ...] = (
         device_class=SensorDeviceClass.ILLUMINANCE,
         native_unit_of_measurement=LIGHT_LUX,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
         value_fn=_velux_illuminance_to_lux,
     ),
     VeluxRoomSensorDescription(
