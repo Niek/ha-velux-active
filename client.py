@@ -49,7 +49,6 @@ from signing import (
     build_signed_modules,
     resolve_bridge_id,
     retrieve_key_error,
-    should_force_rain_override,
 )
 
 # Work around pyatmo 9.4.0 until https://github.com/jabesq-org/pyatmo/pull/564 is released.
@@ -655,7 +654,6 @@ async def command_set_cover_position(args: argparse.Namespace) -> dict[str, Any]
                     f"Cover is on gateway {bridge_id}, but signing key was paired "
                     f"with gateway {args.sign_key_gateway}"
                 )
-            gateway = home.modules.get(bridge_id)
             response = await send_signed_position_command(
                 auth,
                 args,
@@ -663,11 +661,6 @@ async def command_set_cover_position(args: argparse.Namespace) -> dict[str, Any]
                 module_id=module.entity_id,
                 bridge_id=bridge_id,
                 position=args.position,
-                force=should_force_rain_override(
-                    getattr(gateway, "is_raining", None),
-                    module.current_position,
-                    args.position,
-                ),
             )
             accepted = True
         else:
@@ -881,13 +874,12 @@ async def send_signed_position_command(
     module_id: str,
     bridge_id: str,
     position: int,
-    force: bool,
 ) -> dict[str, Any]:
     """Send one signed roof-window target-position command."""
 
     timestamp, base_nonce = allocate_nonces(int(time.time()), 0, -1)
     modules = build_signed_modules(
-        [{"id": module_id, "position": position, "force": force}],
+        [{"id": module_id, "position": position}],
         timestamp,
         base_nonce,
         bridge_id,

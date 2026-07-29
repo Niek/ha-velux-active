@@ -62,20 +62,11 @@ class BatchCommandManager:
         self._sign_key_id = sign_key_id
         self._timezone = timezone
 
-    def queue(
-        self, module_id: str, raw_position: int, *, force: bool = False
-    ) -> asyncio.Future:
+    def queue(self, module_id: str, raw_position: int) -> asyncio.Future:
         """Queue a window command. Returns a Future resolved when the batch fires."""
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
-        self._pending.append(
-            {
-                "id": module_id,
-                "position": raw_position,
-                "force": force,
-                "future": future,
-            }
-        )
+        self._pending.append({"id": module_id, "position": raw_position, "future": future})
 
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._fire_after_delay())

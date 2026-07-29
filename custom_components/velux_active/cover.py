@@ -27,7 +27,6 @@ from .const import (
 )
 from .coordinator import VeluxActiveConfigEntry
 from .entity import VeluxActiveEntity
-from .signing import should_force_rain_override
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -195,14 +194,8 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                 sign_key_id=self._sign_key_id,
                 timezone=self._get_timezone(),
             )
-            gateway = home.modules.get(bridge_id)
-            force = should_force_rain_override(
-                getattr(gateway, "is_raining", None),
-                self.module.current_position,
-                raw_position,
-            )
             try:
-                await batch.queue(self._module_id, raw_position, force=force)
+                await batch.queue(self._module_id, raw_position)
             except BatchCommandError as err:
                 raise HomeAssistantError(str(err)) from err
             self._set_motion_state(ha_position)

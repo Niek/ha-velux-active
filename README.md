@@ -85,7 +85,7 @@ After setup, the integration creates entities for supported devices:
 
 Roof-window movement requires signing keys. Roller shutters, awning blinds, and the auto-ventilation switch work without signing keys.
 
-When the gateway reports rain, roof-window opening commands use the VELUX rain override. VELUX limits these openings to 50% and closes them after at most 15 minutes.
+Signed roof-window commands always include the VELUX rain override so they do not depend on the reported-rain state being current. During rain, VELUX limits openings to 50% and closes them after at most 15 minutes.
 
 ---
 

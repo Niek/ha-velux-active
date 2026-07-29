@@ -15,7 +15,6 @@ from signing import (  # noqa: E402
     compute_scenario_hash,
     resolve_bridge_id,
     retrieve_key_error,
-    should_force_rain_override,
 )
 
 KEY = "AAAAAAAAAAAAAAAAAAAAAA=="  # 16 zero bytes, base64
@@ -75,10 +74,7 @@ def test_resolve_bridge_falls_back_only_when_unambiguous():
 
 
 def test_build_signed_modules_assigns_sequential_nonces_and_signs():
-    cmds = [
-        {"id": "m1", "position": 100, "force": True},
-        {"id": "m2", "position": 50},
-    ]
+    cmds = [{"id": "m1", "position": 100}, {"id": "m2", "position": 50}]
     mods = build_signed_modules(cmds, 12345, 3, "bridgeX", "kid", KEY)
     assert [m["nonce"] for m in mods] == [3, 4]
     assert [m["bridge"] for m in mods] == ["bridgeX", "bridgeX"]
@@ -86,17 +82,7 @@ def test_build_signed_modules_assigns_sequential_nonces_and_signs():
     assert mods[0]["target_position"] == 100
     assert mods[0]["hash_target_position"] == compute_hash(KEY, 100, 12345, 3, "m1")
     assert mods[0]["force"] is True
-    assert "force" not in mods[1]
-
-
-def test_rain_override_only_applies_to_opening_moves():
-    assert should_force_rain_override(True, 0, 50)
-    assert should_force_rain_override(True, None, 50)
-    assert not should_force_rain_override(True, 50, 50)
-    assert not should_force_rain_override(True, 100, 50)
-    assert not should_force_rain_override(False, 0, 50)
-    assert not should_force_rain_override(None, 0, 50)
-    assert not should_force_rain_override(True, None, 0)
+    assert mods[1]["force"] is True
 
 
 def test_scenario_hash_deterministic_urlsafe_and_field_sensitive():
