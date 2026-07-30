@@ -25,7 +25,7 @@
           "hash_sign_key": "Hash Signierungs-Schlüssel",
           "sign_key_id": "Signierungs-Schlüssel ID"
         },
-        "description": "Füge dein Fenster Signierungs-Schlüssel hinzu um volle Bedienung über die Dachfenster zu aktivieren (öffnen, schließen, Position setzen, Stoppen). Dies ist optional \u2014 Rollläden und blinds funktionieren ohne diesen. Siehe die Dokumentation der Integration, wie du diesen Schlüssel erlangen kannst.",
+        "description": "Füge dein Fenster Signierungs-Schlüssel hinzu um volle Bedienung über die Dachfenster zu aktivieren (öffnen, schließen, Position setzen, Stoppen). Dies ist optional \u2014 Rollläden und Plissees/Rollos funktionieren ohne diesen. Siehe die Dokumentation der Integration, wie du diesen Schlüssel erlangen kannst.",
         "title": "Fenster Signierungs-Schlüssel (optional)"
       },
       "pairing_method": {
