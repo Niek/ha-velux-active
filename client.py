@@ -509,6 +509,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Home ID or exact name; omitted only when the account has one home",
     )
 
+    get_configs_parser = subparsers.add_parser(
+        "get-configs",
+        parents=[auth_parent],
+        help="Print raw /syncapi/v1/getconfigs response",
+    )
+    get_configs_parser.add_argument(
+        "home",
+        nargs="?",
+        help="Home ID or exact name; omitted only when the account has one home",
+    )
+
     set_position_parser = subparsers.add_parser(
         "set-cover-position",
         parents=[auth_parent],
@@ -634,6 +645,16 @@ async def command_raw_homestatus(args: argparse.Namespace) -> dict[str, Any]:
             GETHOMESTATUS_ENDPOINT,
             params={"home_id": home_id},
         )
+
+
+async def command_get_configs(args: argparse.Namespace) -> dict[str, Any]:
+    """Handle the get-configs command."""
+
+    async with aiohttp.ClientSession() as websession:
+        auth = build_auth(args, websession)
+        homesdata = await post_api_json(auth, GETHOMESDATA_ENDPOINT)
+        home_id = resolve_home_id(homesdata, args.home)
+        return await get_sync_configs(auth, args, home_id=home_id)
 
 
 async def command_set_cover_position(args: argparse.Namespace) -> dict[str, Any]:
@@ -864,6 +885,42 @@ async def post_api_json(
         raise RuntimeError(f"Unexpected non-JSON response from {endpoint}") from err
     if not isinstance(raw, dict):
         raise RuntimeError(f"Unexpected JSON response from {endpoint}: {raw!r}")
+    return raw
+
+
+async def get_sync_configs(
+    auth: VeluxAsyncAuth,
+    args: argparse.Namespace,
+    *,
+    home_id: str,
+) -> dict[str, Any]:
+    """GET the raw VELUX app sync configuration for one home."""
+
+    access_token = await auth.async_get_access_token()
+    url = f"{args.sync_base_url.rstrip('/')}/syncapi/v1/getconfigs"
+    timeout = aiohttp.ClientTimeout(total=args.timeout)
+    async with auth.websession.get(
+        url,
+        params={"home_id": home_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=timeout,
+    ) as response:
+        text = await response.text()
+
+    if not text.strip():
+        raise RuntimeError(
+            f"getconfigs returned empty response (status {response.status})"
+        )
+
+    try:
+        raw: Any = json.loads(text)
+    except json.JSONDecodeError:
+        raw = {"raw": text}
+
+    if not response.ok:
+        raise RuntimeError(f"getconfigs failed with status {response.status}: {raw}")
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"Unexpected getconfigs response: {raw!r}")
     return raw
 
 
@@ -1433,6 +1490,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         return await command_raw_homesdata(args)
     if args.command == "raw-homestatus":
         return await command_raw_homestatus(args)
+    if args.command == "get-configs":
+        return await command_get_configs(args)
     if args.command == "set-cover-position":
         return await command_set_cover_position(args)
     if args.command == "stop-cover":
