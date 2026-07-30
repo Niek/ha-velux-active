@@ -2,7 +2,11 @@
 
 import pytest
 from pyatmo.exceptions import ApiHomeReachabilityError
-from velux_active.api import VeluxActiveClient, _extract_gateway_connectivity
+from velux_active.api import (
+    VeluxActiveClient,
+    _extract_gateway_connectivity,
+    _extract_gateway_status,
+)
 
 
 class NXG:
@@ -97,6 +101,42 @@ def test_extract_gateway_connectivity_leaves_missing_status_unknown():
     connectivity = _extract_gateway_connectivity({"home1": FakeHome("gateway1")}, {})
 
     assert connectivity == {"gateway1": None}
+
+
+def test_extract_gateway_status_keeps_raw_wifi_diagnostics():
+    status = {
+        "body": {
+            "home": {
+                "modules": [
+                    {
+                        "id": "gateway1",
+                        "type": "NXG",
+                        "wifi_strength": 47,
+                        "wifi_state": "full",
+                    },
+                    {
+                        "id": "sensor1",
+                        "type": "NXS",
+                        "rf_strength": 59,
+                    },
+                ]
+            }
+        }
+    }
+
+    gateway_status = _extract_gateway_status(
+        {"home1": FakeHome("gateway1")}, {"home1": status}
+    )
+
+    assert gateway_status == {
+        "gateway1": {
+            "id": "gateway1",
+            "type": "NXG",
+            "wifi_strength": 47,
+            "wifi_state": "full",
+            "home_id": "home1",
+        }
+    }
 
 
 async def test_async_update_keeps_gateway_unreachable_status():

@@ -92,6 +92,7 @@ class VeluxActiveData:
     homes: dict[str, Home]
     covers: dict[str, Any]
     gateway_connectivity: dict[str, bool | None]
+    gateway_status: dict[str, dict[str, Any]]
     rooms: dict[str, dict[str, Any]]
     sensor_modules: dict[str, dict[str, Any]]
 
@@ -410,12 +411,16 @@ class VeluxActiveClient:
         gateway_connectivity = _extract_gateway_connectivity(
             self._account.homes, raw_status_by_home_id
         )
+        gateway_status = _extract_gateway_status(
+            self._account.homes, raw_status_by_home_id
+        )
 
         return VeluxActiveData(
             user=self._account.user,
             homes=dict(self._account.homes),
             covers=covers,
             gateway_connectivity=gateway_connectivity,
+            gateway_status=gateway_status,
             rooms=rooms,
             sensor_modules=sensor_modules,
         )
@@ -440,6 +445,31 @@ def _extract_gateway_connectivity(
             connectivity[gateway_id] = gateway_reachable(raw_status, gateway_id)
 
     return connectivity
+
+
+def _extract_gateway_status(
+    homes: Mapping[str, Home],
+    raw_status_by_home_id: Mapping[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Extract raw status fields for each known VELUX gateway."""
+    gateway_status: dict[str, dict[str, Any]] = {}
+
+    for home_id, home in homes.items():
+        gateway_ids = {
+            module_id
+            for module_id, module in home.modules.items()
+            if type(module).__name__ == "NXG"
+        }
+        raw_home = _raw_status_home(raw_status_by_home_id.get(home_id, {}))
+        for raw_module in raw_home.get("modules") or []:
+            if not isinstance(raw_module, Mapping):
+                continue
+            gateway_id = str(raw_module.get("id") or "")
+            if gateway_id not in gateway_ids:
+                continue
+            gateway_status[gateway_id] = {**raw_module, "home_id": home_id}
+
+    return gateway_status
 
 
 def _extract_climate_status(

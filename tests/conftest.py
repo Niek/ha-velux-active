@@ -2,6 +2,7 @@
 
 import sys
 import types
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -67,6 +68,19 @@ class HomeAssistantError(Exception):
     pass
 
 
+@dataclass(frozen=True, kw_only=True)
+class SensorEntityDescription:
+    key: str
+    name: str | None = None
+    device_class: str | None = None
+    native_unit_of_measurement: str | None = None
+    options: list[str] | None = None
+    state_class: str | None = None
+    entity_category: str | None = None
+    entity_registry_enabled_default: bool = True
+    suggested_display_precision: int | None = None
+
+
 def _install_module(name: str, **attributes: Any) -> types.ModuleType:
     module = types.ModuleType(name)
     for key, value in attributes.items():
@@ -92,6 +106,23 @@ _install_module(
     BinarySensorEntity=Stub,
 )
 _install_module(
+    "homeassistant.components.sensor",
+    SensorDeviceClass=SimpleNamespace(
+        AQI="aqi",
+        BATTERY="battery",
+        CO2="carbon_dioxide",
+        ENUM="enum",
+        HUMIDITY="humidity",
+        ILLUMINANCE="illuminance",
+        SIGNAL_STRENGTH="signal_strength",
+        TEMPERATURE="temperature",
+        VOLTAGE="voltage",
+    ),
+    SensorEntity=Stub,
+    SensorEntityDescription=SensorEntityDescription,
+    SensorStateClass=SimpleNamespace(MEASUREMENT="measurement"),
+)
+_install_module(
     "homeassistant.config_entries",
     ConfigEntry=Stub,
     ConfigFlow=ConfigFlow,
@@ -100,11 +131,21 @@ _install_module(
 )
 _install_module(
     "homeassistant.const",
+    CONCENTRATION_PARTS_PER_MILLION="ppm",
     CONF_PASSWORD="password",
     CONF_USERNAME="username",
+    LIGHT_LUX="lx",
+    PERCENTAGE="%",
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT="dBm",
     EntityCategory=SimpleNamespace(DIAGNOSTIC="diagnostic"),
+    UnitOfElectricPotential=SimpleNamespace(VOLT="V"),
+    UnitOfTemperature=SimpleNamespace(CELSIUS="°C"),
 )
-_install_module("homeassistant.core", HomeAssistant=object)
+_install_module(
+    "homeassistant.core",
+    HomeAssistant=object,
+    callback=lambda func: func,
+)
 _install_module(
     "homeassistant.exceptions",
     ConfigEntryAuthFailed=ConfigEntryAuthFailed,

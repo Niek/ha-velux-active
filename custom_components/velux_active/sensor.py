@@ -16,7 +16,9 @@ from homeassistant.const import (
     CONCENTRATION_PARTS_PER_MILLION,
     LIGHT_LUX,
     PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
+    UnitOfElectricPotential,
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, callback
@@ -26,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONTROL_URL, DOMAIN, MANUFACTURER
 from .coordinator import VeluxActiveConfigEntry, VeluxActiveDataUpdateCoordinator
+from .entity import gateway_device_info
 
 FOOT_CANDLES_TO_LUX = 10.764
 
@@ -35,6 +38,14 @@ class VeluxRoomSensorDescription(SensorEntityDescription):
     """Describes a VELUX room climate sensor."""
 
     value_fn: Callable[[dict[str, Any]], Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class VeluxDiagnosticSensorDescription(SensorEntityDescription):
+    """Describes an opt-in VELUX diagnostic sensor."""
+
+    source_key: str
+    value_fn: Callable[[Any], Any] | None = None
 
 
 def _tenths_to_celsius(room: dict[str, Any]) -> float | None:
@@ -56,6 +67,16 @@ def _velux_illuminance_to_lux(room: dict[str, Any]) -> float | None:
     # conversion is based on field measurements reported here:
     # https://github.com/Niek/ha-velux-active/issues/22
     return value * FOOT_CANDLES_TO_LUX
+
+
+def _millivolts_to_volts(value: Any) -> float | None:
+    """Convert the API's millivolt battery level to volts."""
+    return value / 1000 if isinstance(value, (int, float)) else None
+
+
+def _rssi_to_dbm(value: Any) -> int | float | None:
+    """Convert an RSSI value or positive magnitude to dBm."""
+    return -abs(value) if isinstance(value, (int, float)) else None
 
 
 ROOM_SENSORS: tuple[VeluxRoomSensorDescription, ...] = (
@@ -106,6 +127,77 @@ MODULE_MODELS = {
     "NXD": "Departure Switch",
 }
 
+BATTERY_STATE_OPTIONS = ["full", "high", "medium", "low", "very_low"]
+RF_STATE_OPTIONS = ["full", "high", "medium", "low", "very_low"]
+WIFI_STATE_OPTIONS = ["full", "high", "medium", "low"]
+
+MODULE_DIAGNOSTIC_SENSORS: tuple[VeluxDiagnosticSensorDescription, ...] = (
+    VeluxDiagnosticSensorDescription(
+        key="battery_voltage",
+        name="Battery voltage",
+        source_key="battery_level",
+        device_class=SensorDeviceClass.VOLTAGE,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        suggested_display_precision=3,
+        value_fn=_millivolts_to_volts,
+    ),
+    VeluxDiagnosticSensorDescription(
+        key="battery_state",
+        name="Battery state",
+        source_key="battery_state",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        options=BATTERY_STATE_OPTIONS,
+    ),
+    VeluxDiagnosticSensorDescription(
+        key="rf_signal_strength",
+        name="RF signal strength",
+        source_key="rf_strength",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_rssi_to_dbm,
+    ),
+    VeluxDiagnosticSensorDescription(
+        key="rf_signal_quality",
+        name="RF signal quality",
+        source_key="rf_state",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        options=RF_STATE_OPTIONS,
+    ),
+)
+
+GATEWAY_DIAGNOSTIC_SENSORS: tuple[VeluxDiagnosticSensorDescription, ...] = (
+    VeluxDiagnosticSensorDescription(
+        key="wifi_signal_strength",
+        name="Wi-Fi signal strength",
+        source_key="wifi_strength",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_rssi_to_dbm,
+    ),
+    VeluxDiagnosticSensorDescription(
+        key="wifi_signal_quality",
+        name="Wi-Fi signal quality",
+        source_key="wifi_state",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        options=WIFI_STATE_OPTIONS,
+    ),
+)
+
 MODULE_DIAGNOSTIC_ATTRIBUTES = (
     "battery_level",
     "battery_state",
@@ -128,6 +220,18 @@ ROOM_TEMPERATURE_ATTRIBUTES = (
 )
 
 
+def _diagnostic_value(
+    description: VeluxDiagnosticSensorDescription, data: dict[str, Any]
+) -> Any:
+    """Return a converted diagnostic value valid for its entity description."""
+    value = data.get(description.source_key)
+    if description.value_fn is not None:
+        value = description.value_fn(value)
+    if description.options is not None and value not in description.options:
+        return None
+    return value
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: VeluxActiveConfigEntry,
@@ -136,7 +240,9 @@ async def async_setup_entry(
     """Set up VELUX room climate and module battery sensors."""
     coordinator = entry.runtime_data
     room_entities: set[tuple[str, str]] = set()
-    module_entities: set[str] = set()
+    battery_entities: set[str] = set()
+    module_diagnostic_entities: set[tuple[str, str]] = set()
+    gateway_diagnostic_entities: set[tuple[str, str]] = set()
 
     @callback
     def _async_add_new_entities() -> None:
@@ -151,10 +257,34 @@ async def async_setup_entry(
                 room_entities.add(entity_key)
 
         for module_id, module in sorted(coordinator.data.sensor_modules.items()):
-            if "battery_percent" not in module or module_id in module_entities:
-                continue
-            entities.append(VeluxModuleBatterySensor(coordinator, module_id))
-            module_entities.add(module_id)
+            if "battery_percent" in module and module_id not in battery_entities:
+                entities.append(VeluxModuleBatterySensor(coordinator, module_id))
+                battery_entities.add(module_id)
+
+            for description in MODULE_DIAGNOSTIC_SENSORS:
+                entity_key = (module_id, description.key)
+                if (
+                    description.source_key not in module
+                    or entity_key in module_diagnostic_entities
+                ):
+                    continue
+                entities.append(
+                    VeluxModuleDiagnosticSensor(coordinator, module_id, description)
+                )
+                module_diagnostic_entities.add(entity_key)
+
+        for gateway_id, gateway in sorted(coordinator.data.gateway_status.items()):
+            for description in GATEWAY_DIAGNOSTIC_SENSORS:
+                entity_key = (gateway_id, description.key)
+                if (
+                    description.source_key not in gateway
+                    or entity_key in gateway_diagnostic_entities
+                ):
+                    continue
+                entities.append(
+                    VeluxGatewayDiagnosticSensor(coordinator, gateway_id, description)
+                )
+                gateway_diagnostic_entities.add(entity_key)
 
         if entities:
             async_add_entities(entities)
@@ -276,6 +406,88 @@ class VeluxModuleBatterySensor(
             super().available
             and self._module_id in self.coordinator.data.sensor_modules
         )
+
+
+class VeluxModuleDiagnosticSensor(
+    CoordinatorEntity[VeluxActiveDataUpdateCoordinator], SensorEntity
+):
+    """An opt-in diagnostic sensor for a battery-powered VELUX module."""
+
+    _attr_has_entity_name = True
+    entity_description: VeluxDiagnosticSensorDescription
+
+    def __init__(
+        self,
+        coordinator: VeluxActiveDataUpdateCoordinator,
+        module_id: str,
+        description: VeluxDiagnosticSensorDescription,
+    ) -> None:
+        """Initialize the module diagnostic sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._module_id = module_id
+        self._attr_unique_id = f"{module_id}_{description.key}"
+
+    @property
+    def _module(self) -> dict[str, Any]:
+        """Return the latest module data for this sensor."""
+        return self.coordinator.data.sensor_modules.get(self._module_id, {})
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Attach to the physical sensor module."""
+        return _module_device_info(self._module_id, self._module)
+
+    @property
+    def native_value(self) -> Any:
+        """Return the converted diagnostic value."""
+        return _diagnostic_value(self.entity_description, self._module)
+
+    @property
+    def available(self) -> bool:
+        """Return whether the diagnostic field is present in current data."""
+        return super().available and self.entity_description.source_key in self._module
+
+
+class VeluxGatewayDiagnosticSensor(
+    CoordinatorEntity[VeluxActiveDataUpdateCoordinator], SensorEntity
+):
+    """An opt-in diagnostic sensor for a VELUX gateway."""
+
+    _attr_has_entity_name = True
+    entity_description: VeluxDiagnosticSensorDescription
+
+    def __init__(
+        self,
+        coordinator: VeluxActiveDataUpdateCoordinator,
+        gateway_id: str,
+        description: VeluxDiagnosticSensorDescription,
+    ) -> None:
+        """Initialize the gateway diagnostic sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._gateway_id = gateway_id
+        self._attr_unique_id = f"{gateway_id}_{description.key}"
+
+    @property
+    def _gateway(self) -> dict[str, Any]:
+        """Return the latest raw gateway status."""
+        return self.coordinator.data.gateway_status.get(self._gateway_id, {})
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Attach to the gateway device."""
+        return gateway_device_info(self._gateway_id)
+
+    @property
+    def native_value(self) -> Any:
+        """Return the converted diagnostic value."""
+        return _diagnostic_value(self.entity_description, self._gateway)
+
+    @property
+    def available(self) -> bool:
+        """Return whether the diagnostic field is present in current data."""
+        return super().available and self.entity_description.source_key in self._gateway
 
 
 def _module_device_info(module_id: str, module: dict[str, Any]) -> DeviceInfo:
