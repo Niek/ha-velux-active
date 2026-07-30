@@ -10,6 +10,23 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    name: Tests and Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.13"
+      - name: Run tests
+        run: uv run --frozen --group test pytest -q
+      - name: Run Ruff
+        run: |
+          uvx ruff@0.16.0 check .
+          uvx ruff@0.16.0 format --check .
+
   hacs:
     name: HACS validation
     runs-on: ubuntu-latest
@@ -33,6 +50,7 @@ jobs:
   release:
     name: Release
     needs:
+      - quality
       - hacs
       - hassfest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
