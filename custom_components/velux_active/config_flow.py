@@ -195,7 +195,9 @@ class _VeluxPairingFlow:
 
     async def _async_retrieve_pairing_key(self, host: str) -> SigningKey:
         """Fetch the key from the local gateway listener."""
-        return await self.hass.async_add_executor_job(retrieve_signing_key, host)
+        return await self.hass.async_add_executor_job(
+            lambda: retrieve_signing_key(host=host)
+        )
 
     def _set_pairing_gateway(self, choice: str) -> None:
         """Store selected pairing gateway identifiers."""

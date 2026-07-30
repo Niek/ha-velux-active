@@ -85,6 +85,29 @@ async def test_pair_step_triggers_selected_gateway():
     assert result == {"step_id": "pair_button"}
 
 
+async def test_pairing_key_retrieval_passes_host_by_keyword(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    signing_key = SigningKey(sign_key_id="key-id", hash_sign_key="hash-key")
+    retrieved_hosts = []
+
+    def retrieve_signing_key(*, host: str):
+        retrieved_hosts.append(host)
+        return signing_key
+
+    async def async_add_executor_job(target, *args):
+        return target(*args)
+
+    monkeypatch.setattr(config_flow, "retrieve_signing_key", retrieve_signing_key)
+    flow = config_flow.VeluxActiveConfigFlow()
+    flow.hass = SimpleNamespace(async_add_executor_job=async_add_executor_job)
+
+    result = await flow._async_retrieve_pairing_key("192.0.2.1")
+
+    assert result == signing_key
+    assert retrieved_hosts == ["192.0.2.1"]
+
+
 async def test_initial_flow_stores_automatically_retrieved_keys():
     flow = config_flow.VeluxActiveConfigFlow()
     flow._username = "user"
