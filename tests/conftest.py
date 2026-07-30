@@ -106,6 +106,13 @@ _install_module(
     BinarySensorEntity=Stub,
 )
 _install_module(
+    "homeassistant.components.cover",
+    ATTR_POSITION="position",
+    CoverDeviceClass=SimpleNamespace(SHUTTER="shutter", WINDOW="window"),
+    CoverEntity=Stub,
+    CoverEntityFeature=SimpleNamespace(OPEN=1, CLOSE=2, STOP=4, SET_POSITION=8),
+)
+_install_module(
     "homeassistant.components.sensor",
     SensorDeviceClass=SimpleNamespace(
         AQI="aqi",
@@ -121,6 +128,10 @@ _install_module(
     SensorEntity=Stub,
     SensorEntityDescription=SensorEntityDescription,
     SensorStateClass=SimpleNamespace(MEASUREMENT="measurement"),
+)
+_install_module(
+    "homeassistant.components.switch",
+    SwitchEntity=Stub,
 )
 _install_module(
     "homeassistant.config_entries",

@@ -30,13 +30,15 @@ async def async_setup_entry(
     entry: VeluxActiveConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up VELUX automatic ventilation switches (one per roof window)."""
+    """Set up VELUX window switches."""
     coordinator = entry.runtime_data
-    entities = [
-        VeluxAlgorithmSwitch(coordinator, module_id)
-        for module_id, module in sorted(coordinator.data.covers.items())
-        if _module_is_window(module_id, module)
-    ]
+    entities = []
+    for module_id, module in sorted(coordinator.data.covers.items()):
+        if not _module_is_window(module_id, module):
+            continue
+        entities.append(VeluxAlgorithmSwitch(coordinator, module_id))
+        if getattr(module, "silent", None) is not None:
+            entities.append(VeluxSilentModeSwitch(coordinator, module_id))
     async_add_entities(entities)
 
 
@@ -88,6 +90,52 @@ class VeluxAlgorithmSwitch(VeluxActiveEntity, SwitchEntity):
             home,
             [{"id": self._module_id, "bridge": bridge_id, "mode": mode}],
             action="Auto ventilation command",
+        )
+
+        self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()
+
+
+class VeluxSilentModeSwitch(VeluxActiveEntity, SwitchEntity):
+    """Switch to enable or disable silent operation for a window."""
+
+    _attr_icon = "mdi:volume-mute"
+
+    def __init__(
+        self,
+        coordinator: VeluxActiveDataUpdateCoordinator,
+        module_id: str,
+    ) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator, module_id)
+        self._attr_name = "Silent Operation"
+        self._attr_unique_id = f"{module_id}_silent_operation"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether silent operation is enabled."""
+        return getattr(self.module, "silent", None)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable silent operation."""
+        await self._async_set_silent(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable silent operation."""
+        await self._async_set_silent(False)
+
+    async def _async_set_silent(self, enabled: bool) -> None:
+        """Send an unsigned silent setstate command for this window."""
+        home = self._get_home()
+        bridge_id = self._get_bridge_id(home) if home is not None else None
+        if home is None or bridge_id is None:
+            raise HomeAssistantError("Could not find home or gateway")
+
+        _LOGGER.debug("Setting silent operation to %s for %s", enabled, self._module_id)
+        await self._async_setstate(
+            home,
+            [{"id": self._module_id, "bridge": bridge_id, "silent": enabled}],
+            action="Silent operation command",
         )
 
         self.async_write_ha_state()
