@@ -1,0 +1,112 @@
+{
+  "title": "Velux Active with Netatmo",
+  "config": {
+    "abort": {
+      "already_configured": "Dieser Account ist bereits konfiguriert.",
+      "reauth_successful": "Erneute Authentifizierung war erfolgreich."
+    },
+    "error": {
+      "cannot_connect": "Kopplung zum Velux Active service ist fehlgeschlagen.",
+      "invalid_auth": "Ungültige Email oder Passwort.",
+      "pairing_failed": "Gateway Kopplung fehlgeschlagen. Vergewissere dich, dass Home Assistant und das Gateway im gleichen Netwerk sind. Wenn die Gateway LED blinkt, dann drücke den Knopf am Gateway und starte den Schlüssel-Empfang erneut. Wenn die Kopplung weiterhin fehlschlägt, dann starte das Gateway neu (an/aus) und versuche es nochmal.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "Email",
+          "password": "Passwort"
+        },
+        "description": "Logge dich mit deinem Velux Active with Netatmo App-Daten ein.",
+        "title": "Velux Active with Netatmo"
+      },
+      "keys": {
+        "data": {
+          "hash_sign_key": "Hash Signierungs-Schlüssel",
+          "sign_key_id": "Signierungs-Schlüssel ID"
+        },
+        "description": "Füge dein Fenster Signierungs-Schlüssel hinzu um volle Bedienung über die Dachfenster zu aktivieren (öffnen, schließen, Position setzen, Stoppen). Dies ist optional \u2014 Rollläden und blinds funktionieren ohne diesen. Siehe die Dokumentation der Integration, wie du diesen Schlüssel erlangen kannst.",
+        "title": "Fenster Signierungs-Schlüssel (optional)"
+      },
+      "pairing_method": {
+        "data": {
+          "pairing_method": "Signierungs-Schlüssel Setup"
+        },
+        "description": "Signierungs-Schlüssel aktivieren volle Bedienung über Dachfenster. Wähle ob Home Assistant direkt mit dem Gateway verbunden werden soll oder ob du den Schlüssel manuell hinzufügen willst.",
+        "title": "Fenster Signierungs-Schlüssel"
+      },
+      "select_gateway": {
+        "data": {
+          "gateway": "Gateway"
+        },
+        "description": "Wähle das VELUX Gateway für die Kopplung mit dem Dachfenster Signierungs-Schlüssel.",
+        "title": "Wähle Gateway"
+      },
+      "pair": {
+        "data": {
+          "gateway_host": "Gateway IP Addresse oder Hostname"
+        },
+        "description": "Füge die lokale IP Addresse oder den Hostname deines VELUX Gateway ein, dann drücke 'Submit'. Home Assistant wird den VELUX cloud service anfragen um das Gateway in den Kopplungsmodus zu versetzen. Warte bis die Gateway LED anfängt grün zu blinken bevor du den Knopf auf dem Gateway drückst.",
+        "data_description": {
+          "gateway_host": "Home Assistant muss während der Kopplung das Gateway über den TCP Port 25050 erreichen können."
+        },
+        "title": "Starte Gateway Kopplung"
+      },
+      "pair_button": {
+        "description": "Drücke jetzt den Knopf an dem VELUX Gateway während die LED grün blinkt. Dann drücke hier 'Submit', damit Home Assistant den Signierungs-Schlüssel vom Gateway empfangen kann.",
+        "title": "Authorisiere Gateway Kopplung"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "Passwort"
+        },
+        "description": "Aktualisiere das Passwort für {username}.",
+        "title": "Erneute Authentifizierung"
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "pairing_failed": "Gateway Kopplung fehlgeschlagen. Vergewissere dich, dass Home Assistant und das Gateway im gleichen Netwerk sind. Wenn die Gateway LED blinkt, dann drücke den Knopf am Gateway und starte den Schlüssel-Empfang erneut. Wenn die Kopplung weiterhin fehlschlägt, dann starte das Gateway neu (an/aus) und versuche es nochmal.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "step": {
+      "init": {
+        "data": {
+          "pairing_method": "Signierungs-Schlüssel Setup"
+        },
+        "description": "Aktualisiere deinen Fenster Signierungs-Schlüssel. Dieser wird benötigt für die Dachfenster Bedienung.",
+        "title": "Aktualisiere Fenster Signierungs-Schlüssel"
+      },
+      "keys": {
+        "data": {
+          "hash_sign_key": "Hash Signierungs-Schlüssel",
+          "sign_key_id": "Signierungs-Schlüssel ID"
+        },
+        "description": "Füge deinen Fenster Signierungs-Schlüssel manuell hinzu. Lass es leer um Fenster Signierung zu deaktivieren.",
+        "title": "Manueller Fenster Signierungs-Schlüssel"
+      },
+      "select_gateway": {
+        "data": {
+          "gateway": "Gateway"
+        },
+        "description": "Wähle das VELUX Gateway für die Kopplung mit dem Dachfenster Signierungs-Schlüssel.",
+        "title": "Wähle Gateway"
+      },
+      "pair": {
+        "data": {
+          "gateway_host": "Gateway IP Addresse oder Hostname"
+        },
+        "description": "Füge die lokale IP Addresse oder den Hostname deines VELUX Gateway ein, dann drücke 'Submit'. Home Assistant wird den VELUX cloud service anfragen um das Gateway in den Kopplungsmodus zu versetzen. Warte bis die Gateway LED anfängt grün zu blinken bevor du den Knopf auf dem Gateway drückst.",
+        "data_description": {
+          "gateway_host": "Home Assistant muss während der Kopplung das Gateway über den TCP Port 25050 erreichen können."
+        },
+        "title": "Starte Gateway Kopplung"
+      },
+      "pair_button": {
+        "description": "Drücke jetzt den Knopf an dem VELUX Gateway während die LED grün blinkt. Dann drücke hier 'Submit', damit Home Assistant den Signierungs-Schlüssel vom Gateway empfangen kann.",
+        "title": "Authorisiere Gateway Kopplung"
+      }
+    }
+  }
+}
