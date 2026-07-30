@@ -106,6 +106,11 @@ _install_module(
     BinarySensorEntity=Stub,
 )
 _install_module(
+    "homeassistant.components.button",
+    ButtonDeviceClass=SimpleNamespace(IDENTIFY="identify"),
+    ButtonEntity=Stub,
+)
+_install_module(
     "homeassistant.components.cover",
     ATTR_POSITION="position",
     CoverDeviceClass=SimpleNamespace(SHUTTER="shutter", WINDOW="window"),
@@ -148,7 +153,7 @@ _install_module(
     LIGHT_LUX="lx",
     PERCENTAGE="%",
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT="dBm",
-    EntityCategory=SimpleNamespace(DIAGNOSTIC="diagnostic"),
+    EntityCategory=SimpleNamespace(CONFIG="config", DIAGNOSTIC="diagnostic"),
     UnitOfElectricPotential=SimpleNamespace(VOLT="V"),
     UnitOfTemperature=SimpleNamespace(CELSIUS="°C"),
 )

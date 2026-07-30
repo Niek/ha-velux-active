@@ -15,6 +15,7 @@ type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.COVER,
     Platform.LOCK,
     Platform.SENSOR,
