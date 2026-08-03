@@ -30,7 +30,11 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRES_AT,
+    CONTROLLED_OPENERS_OPTIONS,
+    GETCONFIGS_ENDPOINT,
     LOGGER,
+    SETCONFIGS_ENDPOINT,
+    VELUX_API_URL,
 )
 from .signing import retrieve_key_error
 
@@ -95,6 +99,7 @@ class VeluxActiveData:
     gateway_status: dict[str, dict[str, Any]]
     rooms: dict[str, dict[str, Any]]
     sensor_modules: dict[str, dict[str, Any]]
+    controlled_openers: dict[str, dict[str, str]]
 
 
 BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
@@ -290,6 +295,9 @@ class VeluxActiveClient:
             token_updated=token_updated,
         )
         self._account = AsyncAccount(self._auth)
+        self._controlled_openers_by_home: dict[
+            str, dict[str, dict[str, str]]
+        ] = {}
 
     async def async_validate(self) -> None:
         """Validate credentials by loading account topology and status."""
@@ -310,6 +318,102 @@ class VeluxActiveClient:
             params={"home_id": home_id},
         )
         return await response.json()
+
+    async def async_get_configs(self, home_id: str) -> dict[str, Any]:
+        """Return the VELUX app configuration for one home."""
+        return await self._async_sync_api_request(
+            "GET",
+            GETCONFIGS_ENDPOINT,
+            params={"home_id": home_id},
+        )
+
+    async def async_set_controlled_openers(
+        self,
+        home_id: str,
+        module_id: str,
+        bridge_id: str,
+        controlled_openers: str,
+    ) -> None:
+        """Set which opening type an indoor climate sensor controls."""
+        if controlled_openers not in CONTROLLED_OPENERS_OPTIONS:
+            raise ValueError(f"Unsupported controlled_openers: {controlled_openers}")
+
+        await self._async_sync_api_request(
+            "POST",
+            SETCONFIGS_ENDPOINT,
+            json_data={
+                "home_id": home_id,
+                "home": {
+                    "modules": [
+                        {
+                            "id": module_id,
+                            "bridge": bridge_id,
+                            "controlled_openers": controlled_openers,
+                        }
+                    ]
+                },
+            },
+        )
+        self._controlled_openers_by_home.setdefault(home_id, {})[module_id] = {
+            "home_id": home_id,
+            "bridge": bridge_id,
+            "controlled_openers": controlled_openers,
+        }
+
+    async def _async_sync_api_request(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        params: dict[str, str] | None = None,
+        json_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Send an authenticated request to the VELUX sync API."""
+        access_token = await self._auth.async_get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        request_kwargs: dict[str, Any] = {
+            "headers": headers,
+            "timeout": aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
+        }
+        if params is not None:
+            request_kwargs["params"] = params
+        if json_data is not None:
+            headers["Content-Type"] = "application/json"
+            request_kwargs["json"] = json_data
+
+        try:
+            async with self._auth.websession.request(
+                method,
+                f"{VELUX_API_URL}{endpoint}",
+                **request_kwargs,
+            ) as response:
+                text = await response.text()
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise VeluxActiveCannotConnect(str(err)) from err
+
+        if not text.strip():
+            raise VeluxActiveCannotConnect(
+                f"{endpoint} returned empty response (status {response.status})"
+            )
+        try:
+            raw: Any = json.loads(text)
+        except JSONDecodeError as err:
+            raise VeluxActiveCannotConnect(
+                f"{endpoint} returned an invalid JSON response"
+            ) from err
+
+        body = raw.get("body") if isinstance(raw, dict) else None
+        errors = body.get("errors") if isinstance(body, dict) else None
+        if (
+            not response.ok
+            or not isinstance(raw, dict)
+            or raw.get("status") != "ok"
+            or errors
+        ):
+            raise VeluxActiveCannotConnect(
+                f"{endpoint} failed with status {response.status}: {raw}"
+            )
+        return raw
 
     async def async_trigger_retrieve_key(self, home_id: str, gateway_id: str) -> None:
         """Ask the gateway to open its temporary local key retrieval listener."""
@@ -408,6 +512,33 @@ class VeluxActiveClient:
         rooms, sensor_modules = _extract_climate_status(
             self._account.homes, raw_status_by_home_id
         )
+        nxs_home_ids = {
+            str(module["home_id"])
+            for module in sensor_modules.values()
+            if module.get("type") == "NXS" and module.get("home_id")
+        }
+        for home_id in sorted(nxs_home_ids):
+            try:
+                raw_configs = await self.async_get_configs(home_id)
+            except VeluxActiveCannotConnect as err:
+                LOGGER.debug(
+                    "Keeping previous VELUX controlled opener configuration: "
+                    "home_id=%s error=%s",
+                    home_id,
+                    err,
+                )
+            else:
+                self._controlled_openers_by_home[home_id] = (
+                    _extract_controlled_openers(home_id, raw_configs)
+                )
+
+        controlled_openers = {
+            module_id: dict(config)
+            for home_configs in self._controlled_openers_by_home.values()
+            for module_id, config in home_configs.items()
+            if module_id in sensor_modules
+            and sensor_modules[module_id].get("type") == "NXS"
+        }
         gateway_connectivity = _extract_gateway_connectivity(
             self._account.homes, raw_status_by_home_id
         )
@@ -423,6 +554,7 @@ class VeluxActiveClient:
             gateway_status=gateway_status,
             rooms=rooms,
             sensor_modules=sensor_modules,
+            controlled_openers=controlled_openers,
         )
 
     @property
@@ -526,6 +658,28 @@ def _extract_climate_status(
             sensor_modules[module_id] = module_data
 
     return rooms, sensor_modules
+
+
+def _extract_controlled_openers(
+    home_id: str, raw_configs: Mapping[str, Any]
+) -> dict[str, dict[str, str]]:
+    """Extract per-NXS controlled opener settings from getconfigs."""
+    configs: dict[str, dict[str, str]] = {}
+    raw_home = _raw_status_home(raw_configs)
+    for raw_module in raw_home.get("modules") or []:
+        if not isinstance(raw_module, Mapping):
+            continue
+        module_id = str(raw_module.get("id") or "")
+        bridge_id = str(raw_module.get("bridge") or "")
+        controlled_openers = raw_module.get("controlled_openers")
+        if not module_id or not bridge_id or not isinstance(controlled_openers, str):
+            continue
+        configs[module_id] = {
+            "home_id": home_id,
+            "bridge": bridge_id,
+            "controlled_openers": controlled_openers,
+        }
+    return configs
 
 
 def _raw_status_home(raw_status: Mapping[str, Any]) -> dict[str, Any]:

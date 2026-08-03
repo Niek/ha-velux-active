@@ -135,6 +135,10 @@ _install_module(
     SensorStateClass=SimpleNamespace(MEASUREMENT="measurement"),
 )
 _install_module(
+    "homeassistant.components.select",
+    SelectEntity=Stub,
+)
+_install_module(
     "homeassistant.components.switch",
     SwitchEntity=Stub,
 )

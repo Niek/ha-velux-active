@@ -65,6 +65,7 @@ DEFAULT_SYNC_BASE_URL = "https://app.velux-active.com"
 DEFAULT_APP_TYPE = "app_velux"
 DEFAULT_TIMEZONE = "UTC"
 BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
+CONTROLLED_OPENERS_OPTIONS = ("windows", "external_covers")
 ROOM_MEASUREMENT_KEYS = (
     "temperature",
     "co2",
@@ -520,6 +521,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Home ID or exact name; omitted only when the account has one home",
     )
 
+    set_controlled_openers_parser = subparsers.add_parser(
+        "set-controlled-openers",
+        parents=[auth_parent],
+        help="Set which products an indoor climate sensor controls",
+    )
+    set_controlled_openers_parser.add_argument(
+        "module",
+        help="NXS module ID or exact name",
+    )
+    set_controlled_openers_parser.add_argument(
+        "controlled_openers",
+        choices=CONTROLLED_OPENERS_OPTIONS,
+        help="Products controlled by the indoor climate sensor",
+    )
+
     set_position_parser = subparsers.add_parser(
         "set-cover-position",
         parents=[auth_parent],
@@ -655,6 +671,25 @@ async def command_get_configs(args: argparse.Namespace) -> dict[str, Any]:
         homesdata = await post_api_json(auth, GETHOMESDATA_ENDPOINT)
         home_id = resolve_home_id(homesdata, args.home)
         return await get_sync_configs(auth, args, home_id=home_id)
+
+
+async def command_set_controlled_openers(args: argparse.Namespace) -> dict[str, Any]:
+    """Handle the set-controlled-openers command."""
+
+    async with aiohttp.ClientSession() as websession:
+        auth = build_auth(args, websession)
+        homesdata = await post_api_json(auth, GETHOMESDATA_ENDPOINT)
+        home_id, module_id, bridge_id = resolve_controlled_openers_target(
+            homesdata, args.module
+        )
+        return await set_sync_controlled_openers(
+            auth,
+            args,
+            home_id=home_id,
+            module_id=module_id,
+            bridge_id=bridge_id,
+            controlled_openers=args.controlled_openers,
+        )
 
 
 async def command_set_cover_position(args: argparse.Namespace) -> dict[str, Any]:
@@ -896,31 +931,93 @@ async def get_sync_configs(
 ) -> dict[str, Any]:
     """GET the raw VELUX app sync configuration for one home."""
 
-    access_token = await auth.async_get_access_token()
-    url = f"{args.sync_base_url.rstrip('/')}/syncapi/v1/getconfigs"
-    timeout = aiohttp.ClientTimeout(total=args.timeout)
-    async with auth.websession.get(
-        url,
+    return await request_sync_json(
+        auth,
+        args,
+        method="GET",
+        endpoint="getconfigs",
         params={"home_id": home_id},
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=timeout,
-    ) as response:
+    )
+
+
+async def set_sync_controlled_openers(
+    auth: VeluxAsyncAuth,
+    args: argparse.Namespace,
+    *,
+    home_id: str,
+    module_id: str,
+    bridge_id: str,
+    controlled_openers: str,
+) -> dict[str, Any]:
+    """POST one indoor climate sensor control target to setconfigs."""
+
+    if controlled_openers not in CONTROLLED_OPENERS_OPTIONS:
+        raise ValueError(f"Unsupported controlled_openers: {controlled_openers}")
+
+    return await request_sync_json(
+        auth,
+        args,
+        method="POST",
+        endpoint="setconfigs",
+        json_payload={
+            "home_id": home_id,
+            "home": {
+                "modules": [
+                    {
+                        "id": module_id,
+                        "bridge": bridge_id,
+                        "controlled_openers": controlled_openers,
+                    }
+                ]
+            },
+        },
+    )
+
+
+async def request_sync_json(
+    auth: VeluxAsyncAuth,
+    args: argparse.Namespace,
+    *,
+    method: str,
+    endpoint: str,
+    params: dict[str, str] | None = None,
+    json_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send an authenticated VELUX sync API request and return JSON."""
+
+    access_token = await auth.async_get_access_token()
+    url = f"{args.sync_base_url.rstrip('/')}/syncapi/v1/{endpoint}"
+    timeout = aiohttp.ClientTimeout(total=args.timeout)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    request_kwargs: dict[str, Any] = {"headers": headers, "timeout": timeout}
+    if params is not None:
+        request_kwargs["params"] = params
+    if json_payload is not None:
+        headers["Content-Type"] = "application/json"
+        request_kwargs["json"] = json_payload
+
+    request = getattr(auth.websession, method.lower())
+    async with request(url, **request_kwargs) as response:
         text = await response.text()
 
     if not text.strip():
         raise RuntimeError(
-            f"getconfigs returned empty response (status {response.status})"
+            f"{endpoint} returned empty response (status {response.status})"
         )
 
     try:
         raw: Any = json.loads(text)
-    except json.JSONDecodeError:
-        raw = {"raw": text}
+    except json.JSONDecodeError as err:
+        raise RuntimeError(f"{endpoint} returned an invalid JSON response") from err
 
     if not response.ok:
-        raise RuntimeError(f"getconfigs failed with status {response.status}: {raw}")
+        raise RuntimeError(f"{endpoint} failed with status {response.status}: {raw}")
     if not isinstance(raw, dict):
-        raise RuntimeError(f"Unexpected getconfigs response: {raw!r}")
+        raise RuntimeError(f"Unexpected {endpoint} response: {raw!r}")
+    body = raw.get("body")
+    errors = body.get("errors") if isinstance(body, dict) else None
+    if raw.get("status") != "ok" or errors:
+        raise RuntimeError(f"{endpoint} failed: {raw}")
     return raw
 
 
@@ -1061,6 +1158,55 @@ def resolve_home_id(raw_homesdata: dict[str, Any], home_ref: str | None) -> str:
 
     available = [f"{home.get('name')} ({home.get('id')})" for home in homes]
     raise ValueError(f"Home '{home_ref}' not found. Available homes: {available}")
+
+
+def resolve_controlled_openers_target(
+    raw_homesdata: dict[str, Any], module_ref: str
+) -> tuple[str, str, str]:
+    """Resolve an NXS module and its home and bridge from raw homesdata."""
+    body = raw_homesdata.get("body")
+    homes = body.get("homes", []) if isinstance(body, dict) else []
+    candidates = [
+        (home, module)
+        for home in homes
+        if isinstance(home, dict)
+        for module in home.get("modules") or []
+        if isinstance(module, dict) and module.get("type") == "NXS"
+    ]
+
+    id_matches = [
+        (home, module)
+        for home, module in candidates
+        if str(module.get("id")) == module_ref
+    ]
+    if len(id_matches) == 1:
+        home, module = id_matches[0]
+    else:
+        name_matches = [
+            (home, module)
+            for home, module in candidates
+            if str(module.get("name") or "").casefold() == module_ref.casefold()
+        ]
+        if len(name_matches) == 1:
+            home, module = name_matches[0]
+        elif len(name_matches) > 1:
+            matches = [str(module.get("id")) for _, module in name_matches]
+            raise ValueError(f"NXS module name '{module_ref}' is ambiguous: {matches}")
+        else:
+            available = [
+                f"{home.get('name')} / {module.get('name')} ({module.get('id')})"
+                for home, module in candidates
+            ]
+            raise ValueError(
+                f"NXS module '{module_ref}' not found. Available modules: {available}"
+            )
+
+    home_id = str(home.get("id") or "")
+    module_id = str(module.get("id") or "")
+    bridge_id = str(module.get("bridge") or "")
+    if not home_id or not module_id or not bridge_id:
+        raise ValueError(f"NXS module '{module_ref}' is missing home or bridge data")
+    return home_id, module_id, bridge_id
 
 
 def resolve_module_bridge_id(
@@ -1492,6 +1638,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         return await command_raw_homestatus(args)
     if args.command == "get-configs":
         return await command_get_configs(args)
+    if args.command == "set-controlled-openers":
+        return await command_set_controlled_openers(args)
     if args.command == "set-cover-position":
         return await command_set_cover_position(args)
     if args.command == "stop-cover":

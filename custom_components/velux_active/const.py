@@ -22,4 +22,8 @@ VELUX_API_URL = "https://app.velux-active.com"
 VELUX_APP_TYPE = "app_velux"
 VELUX_APP_VERSION = "791302006"
 
+GETCONFIGS_ENDPOINT = "/syncapi/v1/getconfigs"
+SETCONFIGS_ENDPOINT = "/syncapi/v1/setconfigs"
+CONTROLLED_OPENERS_OPTIONS = ("windows", "external_covers")
+
 LOGGER = logging.getLogger(__package__)
