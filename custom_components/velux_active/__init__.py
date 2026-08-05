@@ -18,6 +18,7 @@ PLATFORMS = [
     Platform.BUTTON,
     Platform.COVER,
     Platform.LOCK,
+    Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
 ]

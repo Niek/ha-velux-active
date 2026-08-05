@@ -38,6 +38,7 @@ class FakeAccount:
 def _client_returning(status):
     client = object.__new__(VeluxActiveClient)
     client._account = FakeAccount()
+    client._controlled_openers_by_home = {}
 
     async def async_get_raw_homestatus(home_id):
         assert home_id == "home1"
