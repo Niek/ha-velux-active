@@ -151,7 +151,6 @@ _install_module(
 )
 _install_module(
     "homeassistant.const",
-    CONCENTRATION_PARTS_PER_MILLION="ppm",
     CONF_PASSWORD="password",
     CONF_USERNAME="username",
     LIGHT_LUX="lx",
@@ -159,6 +158,7 @@ _install_module(
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT="dBm",
     EntityCategory=SimpleNamespace(CONFIG="config", DIAGNOSTIC="diagnostic"),
     UnitOfElectricPotential=SimpleNamespace(VOLT="V"),
+    UnitOfRatio=SimpleNamespace(PARTS_PER_MILLION="ppm"),
     UnitOfTemperature=SimpleNamespace(CELSIUS="°C"),
 )
 _install_module(
