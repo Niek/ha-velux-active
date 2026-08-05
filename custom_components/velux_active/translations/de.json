@@ -8,7 +8,7 @@
     "error": {
       "cannot_connect": "Verbindung mit dem Velux Active-Dienst fehlgeschlagen.",
       "invalid_auth": "Ungültige E-Mail-Adresse oder ungültiges Passwort.",
-      "pairing_failed": "Gateway-Kopplung fehlgeschlagen. Stelle sicher, dass sich Home Assistant und das Gateway im selben Netzwerk befinden. Wenn die Gateway-LED blinkt, drücke die Taste am Gateway und versuche erneut, den Schlüssel abzurufen. Wenn die Kopplung weiterhin fehlschlägt, starte das Gateway neu und versuche es erneut.",
+      "pairing_failed": "Gateway-Kopplung fehlgeschlagen. Stelle sicher, dass sich Home Assistant und das Gateway im selben Netzwerk befinden. Wenn die Gateway-LED grün blinkt, drücke die Taste am Gateway und versuche erneut, den Schlüssel abzurufen. Wenn die Kopplung weiterhin fehlschlägt, starte das Gateway neu und versuche es erneut.",
       "unknown": "Unerwarteter Fehler."
     },
     "step": {
@@ -46,14 +46,14 @@
         "data": {
           "gateway_host": "IP-Adresse oder Hostname des Gateways"
         },
-        "description": "Gib die lokale IP-Adresse oder den Hostnamen deines VELUX-Gateways ein und bestätige. Home Assistant fordert anschließend den VELUX-Cloud-Dienst auf, das Gateway in den Kopplungsmodus zu versetzen. Warte, bis die Gateway-LED zu blinken beginnt, bevor du die Taste am Gateway drückst.",
+        "description": "Gib die lokale IP-Adresse oder den Hostnamen deines VELUX-Gateways ein und bestätige. Home Assistant fordert anschließend den VELUX-Cloud-Dienst auf, das Gateway in den Kopplungsmodus zu versetzen. Warte, bis die Gateway-LED beginnt grün zu blinken, bevor du die Taste am Gateway drückst.",
         "data_description": {
           "gateway_host": "Home Assistant muss dieses Gateway während der Kopplung über TCP-Port 25050 erreichen können."
         },
         "title": "Gateway-Kopplung starten"
       },
       "pair_button": {
-        "description": "Drücke jetzt die Taste am VELUX-Gateway, während die LED blinkt. Bestätige anschließend, damit Home Assistant die Signaturschlüssel vom lokalen Gateway abrufen kann.",
+        "description": "Drücke jetzt die Taste am VELUX-Gateway, während die LED grün blinkt. Bestätige anschließend, damit Home Assistant die Signaturschlüssel vom lokalen Gateway abrufen kann.",
         "title": "Gateway-Kopplung autorisieren"
       },
       "reauth_confirm": {
@@ -67,7 +67,7 @@
   },
   "options": {
     "error": {
-      "pairing_failed": "Gateway-Kopplung fehlgeschlagen. Stelle sicher, dass sich Home Assistant und das Gateway im selben Netzwerk befinden. Wenn die Gateway-LED blinkt, drücke die Taste am Gateway und versuche erneut, den Schlüssel abzurufen. Wenn die Kopplung weiterhin fehlschlägt, starte das Gateway neu und versuche es erneut.",
+      "pairing_failed": "Gateway-Kopplung fehlgeschlagen. Stelle sicher, dass sich Home Assistant und das Gateway im selben Netzwerk befinden. Wenn die Gateway-LED grün blinkt, drücke die Taste am Gateway und versuche erneut, den Schlüssel abzurufen. Wenn die Kopplung weiterhin fehlschlägt, starte das Gateway neu und versuche es erneut.",
       "unknown": "Unerwarteter Fehler."
     },
     "step": {
@@ -97,14 +97,14 @@
         "data": {
           "gateway_host": "IP-Adresse oder Hostname des Gateways"
         },
-        "description": "Gib die lokale IP-Adresse oder den Hostnamen deines VELUX-Gateways ein und bestätige. Home Assistant fordert anschließend den VELUX-Cloud-Dienst auf, das Gateway in den Kopplungsmodus zu versetzen. Warte, bis die Gateway-LED zu blinken beginnt, bevor du die Taste am Gateway drückst.",
+        "description": "Gib die lokale IP-Adresse oder den Hostnamen deines VELUX-Gateways ein und bestätige. Home Assistant fordert anschließend den VELUX-Cloud-Dienst auf, das Gateway in den Kopplungsmodus zu versetzen. Warte, bis die Gateway-LED beginnt grün zu blinken, bevor du die Taste am Gateway drückst.",
         "data_description": {
           "gateway_host": "Home Assistant muss dieses Gateway während der Kopplung über TCP-Port 25050 erreichen können."
         },
         "title": "Gateway-Kopplung starten"
       },
       "pair_button": {
-        "description": "Drücke jetzt die Taste am VELUX-Gateway, während die LED blinkt. Bestätige anschließend, damit Home Assistant die Signaturschlüssel vom lokalen Gateway abrufen kann.",
+        "description": "Drücke jetzt die Taste am VELUX-Gateway, während die LED grün blinkt. Bestätige anschließend, damit Home Assistant die Signaturschlüssel vom lokalen Gateway abrufen kann.",
         "title": "Gateway-Kopplung autorisieren"
       }
     }
