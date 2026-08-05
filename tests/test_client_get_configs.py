@@ -120,9 +120,7 @@ async def test_set_sync_controlled_openers_uses_confirmed_payload():
 
 
 async def test_set_sync_controlled_openers_rejects_product_error():
-    session = FakeSession(
-        {"status": "error", "body": {"errors": [{"code": 9}]}}
-    )
+    session = FakeSession({"status": "error", "body": {"errors": [{"code": 9}]}})
     auth = SimpleNamespace(
         websession=session,
         async_get_access_token=AsyncMock(return_value="access-token"),
@@ -169,9 +167,11 @@ def test_resolve_controlled_openers_target_uses_nxs_module():
         }
     }
 
-    assert client.resolve_controlled_openers_target(
-        homesdata, "Bedroom sensor"
-    ) == ("home1", "sensor1", "gateway1")
+    assert client.resolve_controlled_openers_target(homesdata, "Bedroom sensor") == (
+        "home1",
+        "sensor1",
+        "gateway1",
+    )
 
 
 def test_parser_accepts_set_controlled_openers_command():

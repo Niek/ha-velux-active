@@ -295,9 +295,7 @@ class VeluxActiveClient:
             token_updated=token_updated,
         )
         self._account = AsyncAccount(self._auth)
-        self._controlled_openers_by_home: dict[
-            str, dict[str, dict[str, str]]
-        ] = {}
+        self._controlled_openers_by_home: dict[str, dict[str, dict[str, str]]] = {}
 
     async def async_validate(self) -> None:
         """Validate credentials by loading account topology and status."""
@@ -528,8 +526,8 @@ class VeluxActiveClient:
                     err,
                 )
             else:
-                self._controlled_openers_by_home[home_id] = (
-                    _extract_controlled_openers(home_id, raw_configs)
+                self._controlled_openers_by_home[home_id] = _extract_controlled_openers(
+                    home_id, raw_configs
                 )
 
         controlled_openers = {
