@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from velux_active import button
+from velux_active import button, cover
 
 
 class NXG:
@@ -21,6 +21,8 @@ class FakeModule:
         self.velux_type = velux_type
         self.room_id = None
         self.firmware_revision = 1
+        self.current_position = 50
+        self.target_position = 50
 
 
 class FakeHome:
@@ -61,6 +63,8 @@ class FakeCoordinator:
         self.data = FakeData()
         self.hass = SimpleNamespace(config=SimpleNamespace(time_zone="Europe/Berlin"))
         self.client = object()
+        self.config_entry = SimpleNamespace(data={}, entry_id="entry1")
+        self.gateway_stop_sequences = {}
         self.listeners = []
 
     def async_add_listener(self, listener):
@@ -169,3 +173,37 @@ async def test_stop_all_movements_targets_gateway_and_refreshes(monkeypatch):
         action="Stop all movements command",
     )
     coordinator.async_request_refresh.assert_awaited_once_with()
+    assert coordinator.gateway_stop_sequences == {"gateway1": 1}
+
+
+def test_stop_button_is_unavailable_without_gateway():
+    coordinator = FakeCoordinator()
+    entity = button.VeluxStopAllMovementsButton(coordinator, "home1", "gateway1")
+
+    assert entity.available
+
+    del coordinator.data.homes["home1"].modules["gateway1"]
+
+    assert not entity.available
+
+
+def test_gateway_stop_clears_optimistic_cover_motion(monkeypatch):
+    coordinator = FakeCoordinator()
+    entity = cover.VeluxActiveCover(coordinator, "window1")
+    entity._motion_state = "opening"
+    entity._motion_target_position = 100
+    monkeypatch.setattr(
+        cover.VeluxActiveEntity,
+        "_handle_coordinator_update",
+        lambda self: None,
+        raising=False,
+    )
+
+    entity._handle_coordinator_update()
+    assert entity.is_opening
+
+    coordinator.gateway_stop_sequences["gateway1"] = 1
+    entity._handle_coordinator_update()
+
+    assert not entity.is_opening
+    assert entity._motion_target_position is None

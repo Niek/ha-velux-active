@@ -184,6 +184,14 @@ class VeluxStopAllMovementsButton(
         """Return device info for the gateway."""
         return gateway_device_info(self._gateway_id)
 
+    @property
+    def available(self) -> bool:
+        """Return True while the gateway remains in the home topology."""
+        home = self.coordinator.data.homes.get(self._home_id)
+        return (
+            super().available and home is not None and self._gateway_id in home.modules
+        )
+
     async def async_press(self) -> None:
         """Stop all movements through the gateway."""
         home = self.coordinator.data.homes[self._home_id]
@@ -195,4 +203,6 @@ class VeluxStopAllMovementsButton(
             [{"id": self._gateway_id, "stop_movements": "all"}],
             action="Stop all movements command",
         )
+        sequences = self.coordinator.gateway_stop_sequences
+        sequences[self._gateway_id] = sequences.get(self._gateway_id, 0) + 1
         await self.coordinator.async_request_refresh()

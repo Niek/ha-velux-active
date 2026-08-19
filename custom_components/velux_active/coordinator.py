@@ -50,6 +50,7 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
             update_interval=UPDATE_INTERVAL,
         )
         self.client = client
+        self.gateway_stop_sequences: dict[str, int] = {}
         self._fast_poll_task: asyncio.Task | None = None
         self._topology_loaded: bool = False
         self._consecutive_failures: int = 0
