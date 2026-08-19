@@ -83,6 +83,7 @@ async def test_setup_adds_identify_buttons_for_supported_modules():
 
     assert {entity._attr_unique_id for entity in entities} == {
         "gateway1_identify",
+        "gateway1_stop_all_movements",
         "sensor1_identify",
         "switch1_identify",
         "window1_identify",
@@ -98,6 +99,7 @@ async def test_sensor_identify_buttons_are_discovered_once():
 
     assert {entity._attr_unique_id for entity in entities} == {
         "gateway1_identify",
+        "gateway1_stop_all_movements",
         "window1_identify",
     }
 
@@ -147,3 +149,23 @@ async def test_identify_omits_bridge_for_gateway(monkeypatch):
         [{"id": "gateway1", "identify": True}],
         action="Identify command",
     )
+
+
+async def test_stop_all_movements_targets_gateway_and_refreshes(monkeypatch):
+    coordinator = FakeCoordinator()
+    coordinator.async_request_refresh = AsyncMock()
+    async_post_setstate = AsyncMock()
+    monkeypatch.setattr(button, "async_post_setstate", async_post_setstate)
+    entity = button.VeluxStopAllMovementsButton(coordinator, "home1", "gateway1")
+
+    await entity.async_press()
+
+    async_post_setstate.assert_awaited_once_with(
+        coordinator.hass,
+        coordinator.client,
+        "home1",
+        "Europe/Berlin",
+        [{"id": "gateway1", "stop_movements": "all"}],
+        action="Stop all movements command",
+    )
+    coordinator.async_request_refresh.assert_awaited_once_with()

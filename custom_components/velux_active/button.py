@@ -42,6 +42,10 @@ async def async_setup_entry(
             entities.append(
                 VeluxIdentifyButton(coordinator, home_id, module_id, module_type)
             )
+            if module_type == "NXG":
+                entities.append(
+                    VeluxStopAllMovementsButton(coordinator, home_id, module_id)
+                )
             known_modules.add(module_key)
 
         if entities:
@@ -153,3 +157,42 @@ class VeluxIdentifyButton(
             [payload],
             action="Identify command",
         )
+
+
+class VeluxStopAllMovementsButton(
+    CoordinatorEntity[VeluxActiveDataUpdateCoordinator], ButtonEntity
+):
+    """Button that stops all movements through a VELUX gateway."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Stop all movements"
+
+    def __init__(
+        self,
+        coordinator: VeluxActiveDataUpdateCoordinator,
+        home_id: str,
+        gateway_id: str,
+    ) -> None:
+        """Initialize the stop-all button."""
+        super().__init__(coordinator)
+        self._home_id = home_id
+        self._gateway_id = gateway_id
+        self._attr_unique_id = f"{gateway_id}_stop_all_movements"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info for the gateway."""
+        return gateway_device_info(self._gateway_id)
+
+    async def async_press(self) -> None:
+        """Stop all movements through the gateway."""
+        home = self.coordinator.data.homes[self._home_id]
+        await async_post_setstate(
+            self.coordinator.hass,
+            self.coordinator.client,
+            home.entity_id,
+            str(self.coordinator.hass.config.time_zone),
+            [{"id": self._gateway_id, "stop_movements": "all"}],
+            action="Stop all movements command",
+        )
+        await self.coordinator.async_request_refresh()
