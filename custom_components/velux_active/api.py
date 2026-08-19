@@ -312,6 +312,7 @@ class VeluxActiveClient:
         )
         self._account = AsyncAccount(self._auth)
         self._controlled_openers_by_home: dict[str, dict[str, dict[str, str]]] = {}
+        self._realtime_timestamps: dict[tuple[str, str], int] = {}
 
     async def async_validate(self) -> None:
         """Validate credentials by loading account topology and status."""
@@ -332,7 +333,8 @@ class VeluxActiveClient:
         if not isinstance(raw_home, Mapping):
             return False
 
-        home = self._account.homes.get(str(raw_home.get("id") or ""))
+        home_id = str(raw_home.get("id") or "")
+        home = self._account.homes.get(home_id)
         if home is None:
             return False
 
@@ -346,13 +348,25 @@ class VeluxActiveClient:
             if not isinstance(raw_module, Mapping):
                 continue
 
-            module = home.modules.get(str(raw_module.get("id") or ""))
+            module_id = str(raw_module.get("id") or "")
+            module = home.modules.get(module_id)
             if module is None or not _is_cover_module(module):
                 continue
 
             last_seen = _optional_int(raw_module.get("last_seen"))
             incoming_timestamp = last_seen if last_seen is not None else event_timestamp
-            current_timestamp = _optional_int(getattr(module, "last_seen", None))
+            timestamp_key = (home_id, module_id)
+            current_timestamp = max(
+                (
+                    timestamp
+                    for timestamp in (
+                        _optional_int(getattr(module, "last_seen", None)),
+                        self._realtime_timestamps.get(timestamp_key),
+                    )
+                    if timestamp is not None
+                ),
+                default=None,
+            )
             if (
                 incoming_timestamp is not None
                 and current_timestamp is not None
@@ -360,13 +374,17 @@ class VeluxActiveClient:
             ):
                 continue
 
+            has_realtime_state = False
             for field in REALTIME_COVER_FIELDS:
                 if field not in raw_module:
                     continue
+                has_realtime_state = True
                 value = raw_module[field]
                 if getattr(module, field, None) != value:
                     setattr(module, field, value)
                     changed = True
+            if has_realtime_state and incoming_timestamp is not None:
+                self._realtime_timestamps[timestamp_key] = incoming_timestamp
 
         return changed
 

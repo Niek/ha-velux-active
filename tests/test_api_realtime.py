@@ -26,6 +26,7 @@ def make_client(cover):
     client._account = SimpleNamespace(
         homes={"home1": SimpleNamespace(modules={"cover1": cover})}
     )
+    client._realtime_timestamps = {}
     return client
 
 
@@ -89,6 +90,52 @@ def test_realtime_event_ignores_stale_cover_state():
     assert cover.current_position == 100
     assert cover.target_position == 100
     assert cover.last_seen == 100
+
+
+def test_realtime_event_persists_fallback_timestamp():
+    cover = FakeCover()
+    client = make_client(cover)
+
+    assert (
+        client.apply_realtime_cover_event(
+            {
+                "timestamp": 200,
+                "home": {
+                    "id": "home1",
+                    "modules": [
+                        {
+                            "id": "cover1",
+                            "current_position": 50,
+                            "target_position": 0,
+                        }
+                    ],
+                },
+            }
+        )
+        is True
+    )
+    assert client._realtime_timestamps[("home1", "cover1")] == 200
+
+    assert (
+        client.apply_realtime_cover_event(
+            {
+                "timestamp": 150,
+                "home": {
+                    "id": "home1",
+                    "modules": [
+                        {
+                            "id": "cover1",
+                            "current_position": 75,
+                            "target_position": 100,
+                        }
+                    ],
+                },
+            }
+        )
+        is False
+    )
+    assert cover.current_position == 50
+    assert cover.target_position == 0
 
 
 def test_realtime_event_ignores_unknown_or_malformed_payloads():
