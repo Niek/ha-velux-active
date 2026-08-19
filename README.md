@@ -7,6 +7,7 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 - **Automatic ventilation** - enable or disable the gateway algorithm for roof windows. Works without signing keys.
 - **Departure mode** - lock/unlock all movement via the gateway (e.g. for alarm integrations). Locking works without keys; unlocking requires signing.
 - **Room climate sensors** - temperature, CO2, humidity, illuminance, air quality, plus NXS/NXD battery and RF diagnostics.
+- **Realtime cover state** - receive cover movement and position updates from the VELUX cloud event stream.
 
 ---
 
@@ -94,6 +95,13 @@ entity registry if useful.
 
 Signed roof-window commands always include the VELUX rain override so they do not depend on the reported-rain state being current. During rain, VELUX limits openings to 50% and closes them after at most 15 minutes.
 
+### Realtime Updates
+
+The integration subscribes to the VELUX cloud event stream and applies cover
+movement and position updates as they arrive. Normal 30-second REST polling is
+kept as a fallback for missed events and for gateway, climate, and diagnostic
+data that is not included in cover events.
+
 ---
 
 ## Departure Mode
@@ -166,6 +174,7 @@ Examples:
 ./client.py login you@example.com 'your-password'
 ./client.py list-devices --email you@example.com --password 'your-password'
 ./client.py raw-homesdata --email you@example.com --password 'your-password'
+./client.py watch-events --email you@example.com --password 'your-password'
 ./client.py set-cover-position <device_id> 50 --email you@example.com --password 'your-password'
 ```
 

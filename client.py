@@ -45,6 +45,7 @@ from pyatmo.enums import ScheduleType
 from pyatmo.exceptions import NoDeviceError
 from pyatmo.helpers import extract_raw_data
 from pyatmo.modules.device_types import DeviceType
+from realtime import async_iter_events
 from signing import (
     allocate_nonces,
     build_signed_modules,
@@ -499,6 +500,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print raw /homesdata response",
     )
 
+    subparsers.add_parser(
+        "watch-events",
+        parents=[auth_parent],
+        help="Stream realtime VELUX events as JSON lines",
+    )
+
     raw_status_parser = subparsers.add_parser(
         "raw-homestatus",
         parents=[auth_parent],
@@ -647,6 +654,18 @@ async def command_raw_homesdata(args: argparse.Namespace) -> dict[str, Any]:
     async with aiohttp.ClientSession() as websession:
         auth = build_auth(args, websession)
         return await post_api_json(auth, GETHOMESDATA_ENDPOINT)
+
+
+async def command_watch_events(args: argparse.Namespace) -> None:
+    """Stream realtime WebSocket events until interrupted."""
+    async with aiohttp.ClientSession() as websession:
+        auth = build_auth(args, websession)
+        async for event in async_iter_events(
+            websession,
+            auth.async_get_access_token,
+            args.app_version,
+        ):
+            print_json_line(event)
 
 
 async def command_raw_homestatus(args: argparse.Namespace) -> dict[str, Any]:
@@ -1625,7 +1644,14 @@ def print_json(payload: dict[str, Any], *, stream: Any = sys.stdout) -> None:
     stream.write("\n")
 
 
-async def run(args: argparse.Namespace) -> dict[str, Any]:
+def print_json_line(payload: dict[str, Any], *, stream: Any = sys.stdout) -> None:
+    """Print one compact JSON line and flush it immediately."""
+    json.dump(payload, stream, separators=(",", ":"))
+    stream.write("\n")
+    stream.flush()
+
+
+async def run(args: argparse.Namespace) -> dict[str, Any] | None:
     """Run the requested command."""
 
     if args.command == "login":
@@ -1634,6 +1660,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         return await command_list_devices(args)
     if args.command == "raw-homesdata":
         return await command_raw_homesdata(args)
+    if args.command == "watch-events":
+        return await command_watch_events(args)
     if args.command == "raw-homestatus":
         return await command_raw_homestatus(args)
     if args.command == "get-configs":
@@ -1663,6 +1691,8 @@ def main() -> int:
     try:
         result = asyncio.run(run(args))
     except KeyboardInterrupt:
+        if args.command == "watch-events":
+            return 0
         print_json(
             {
                 "ok": False,
@@ -1681,7 +1711,8 @@ def main() -> int:
         )
         return 1
 
-    print_json({"ok": True, "result": result})
+    if result is not None:
+        print_json({"ok": True, "result": result})
     return 0
 
 

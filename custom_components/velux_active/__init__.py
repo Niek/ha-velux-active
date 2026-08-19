@@ -56,6 +56,7 @@ async def async_setup_entry(
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    coordinator.start_realtime()
 
     async def _async_update_listener(
         hass: HomeAssistant,
@@ -87,4 +88,7 @@ async def async_unload_entry(
     entry: VeluxActiveConfigEntry,
 ) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        await entry.runtime_data.async_stop_realtime()
+    return unload_ok
