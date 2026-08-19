@@ -45,7 +45,6 @@ ScheduleType._value2member_map_.setdefault("algo", ScheduleType.AUTO)
 
 DEFAULT_CLIENT_ID = "5931426da127d981e76bdd3f"
 DEFAULT_CLIENT_SECRET = "6ae2d89d15e767ae5c56b456b452d319"
-DEFAULT_APP_VERSION = "791302006"
 DEFAULT_SCOPE = "velux_scopes"
 DEFAULT_TIMEOUT = 10.0
 DEFAULT_USER_PREFIX = "velux"
@@ -215,7 +214,7 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         data = {
             "client_id": DEFAULT_CLIENT_ID,
             "client_secret": DEFAULT_CLIENT_SECRET,
-            "app_version": DEFAULT_APP_VERSION,
+            "app_version": VELUX_APP_VERSION,
             **payload,
         }
 
@@ -319,14 +318,13 @@ class VeluxActiveClient:
         await self.async_setup()  # Load topology first
         await self.async_update()
 
-    async def async_realtime_events(self) -> AsyncIterator[dict[str, Any]]:
+    def async_realtime_events(self) -> AsyncIterator[dict[str, Any]]:
         """Yield embedded events from the VELUX app WebSocket."""
-        async for event in async_iter_events(
+        return async_iter_events(
             self._auth.websession,
             self._auth.async_get_access_token,
             VELUX_APP_VERSION,
-        ):
-            yield event
+        )
 
     def apply_realtime_cover_event(self, event: Mapping[str, Any]) -> bool:
         """Apply one partial WebSocket event to known cover objects."""

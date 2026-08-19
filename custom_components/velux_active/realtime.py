@@ -13,6 +13,7 @@ import aiohttp
 WEBSOCKET_URL = "wss://app.velux-active.com/ws/"
 WEBSOCKET_HEARTBEAT = 30.0
 RECONNECT_DELAY = 5.0
+MAX_RECONNECT_DELAY = 300.0
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,9 +54,10 @@ async def async_iter_events(
     app_version: str,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield VELUX embedded events, reconnecting after a connection ends."""
+    reconnect_delay = RECONNECT_DELAY
     while True:
-        access_token = await access_token_getter()
         try:
+            access_token = await access_token_getter()
             async with websession.ws_connect(
                 WEBSOCKET_URL,
                 heartbeat=WEBSOCKET_HEARTBEAT,
@@ -80,15 +82,20 @@ async def async_iter_events(
                         continue
 
                     status = raw.get("status")
+                    if status == "ok":
+                        reconnect_delay = RECONNECT_DELAY
                     if status is not None and status != "ok":
                         raise RuntimeError(f"WebSocket subscription failed: {status}")
 
                     if event := extract_embedded_event(raw):
+                        reconnect_delay = RECONNECT_DELAY
                         yield event
         except (aiohttp.ClientError, OSError, TimeoutError) as err:
             _LOGGER.debug(
-                "VELUX WebSocket disconnected; reconnecting: %s",
-                err or type(err).__name__,
+                "VELUX WebSocket disconnected; reconnecting in %.0f seconds: %s",
+                reconnect_delay,
+                str(err) or type(err).__name__,
             )
 
-        await asyncio.sleep(RECONNECT_DELAY)
+        await asyncio.sleep(reconnect_delay)
+        reconnect_delay = min(reconnect_delay * 2, MAX_RECONNECT_DELAY)

@@ -2,11 +2,13 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import aiohttp
 import pytest
+import velux_active.realtime as realtime
 from velux_active.realtime import (
+    RECONNECT_DELAY,
     WEBSOCKET_HEARTBEAT,
     WEBSOCKET_URL,
     async_iter_events,
@@ -54,7 +56,10 @@ class FakeSession:
 
     def ws_connect(self, url, **kwargs):
         self.connections.append((url, kwargs))
-        return next(self.websockets)
+        result = next(self.websockets)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
 
 def test_build_subscribe_message_matches_android_app():
@@ -151,6 +156,56 @@ async def test_iter_events_propagates_access_token_failure():
         await anext(events)
 
     assert session.connections == []
+
+
+async def test_iter_events_retries_transient_access_token_failure(monkeypatch):
+    event = {"timestamp": 123, "home": {"id": "home1"}}
+    websocket = FakeWebSocket(
+        [
+            SimpleNamespace(
+                type=aiohttp.WSMsgType.TEXT,
+                data=json.dumps({"push_type": "embedded_json", "extra_params": event}),
+            )
+        ]
+    )
+    session = FakeSession(websocket)
+    get_access_token = AsyncMock(
+        side_effect=[aiohttp.ClientConnectionError("offline"), "token"]
+    )
+    sleep = AsyncMock()
+    monkeypatch.setattr(realtime.asyncio, "sleep", sleep)
+    events = async_iter_events(session, get_access_token, "791302006")
+
+    assert await anext(events) == event
+    await events.aclose()
+
+    sleep.assert_awaited_once_with(RECONNECT_DELAY)
+    assert get_access_token.await_count == 2
+
+
+async def test_iter_events_backs_off_reconnects(monkeypatch):
+    event = {"timestamp": 123, "home": {"id": "home1"}}
+    websocket = FakeWebSocket(
+        [
+            SimpleNamespace(
+                type=aiohttp.WSMsgType.TEXT,
+                data=json.dumps({"push_type": "embedded_json", "extra_params": event}),
+            )
+        ]
+    )
+    session = FakeSession(
+        aiohttp.ClientConnectionError(),
+        aiohttp.ClientConnectionError(),
+        websocket,
+    )
+    sleep = AsyncMock()
+    monkeypatch.setattr(realtime.asyncio, "sleep", sleep)
+    events = async_iter_events(session, AsyncMock(return_value="token"), "791302006")
+
+    assert await anext(events) == event
+    await events.aclose()
+
+    assert sleep.await_args_list == [call(RECONNECT_DELAY), call(RECONNECT_DELAY * 2)]
 
 
 async def test_iter_events_propagates_subscription_failure():

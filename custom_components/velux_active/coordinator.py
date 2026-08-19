@@ -19,6 +19,7 @@ from .api import (
     VeluxActiveInvalidAuth,
 )
 from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
+from .realtime import MAX_RECONNECT_DELAY, RECONNECT_DELAY
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
 
@@ -78,9 +79,24 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
 
     async def _async_listen_realtime(self) -> None:
         """Merge realtime cover events into the current coordinator data."""
-        async for event in self.client.async_realtime_events():
-            if self.client.apply_realtime_cover_event(event):
-                self.async_set_updated_data(self.data)
+        reconnect_delay = RECONNECT_DELAY
+        while True:
+            try:
+                async for event in self.client.async_realtime_events():
+                    reconnect_delay = RECONNECT_DELAY
+                    if self.client.apply_realtime_cover_event(event):
+                        self.async_update_listeners()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                LOGGER.warning(
+                    "VELUX WebSocket listener stopped; restarting in %.0f seconds: %s",
+                    reconnect_delay,
+                    str(err) or type(err).__name__,
+                )
+
+            await asyncio.sleep(reconnect_delay)
+            reconnect_delay = min(reconnect_delay * 2, MAX_RECONNECT_DELAY)
 
     def start_fast_polling(self) -> None:
         """Switch to fast polling for FAST_POLL_DURATION seconds after a movement."""

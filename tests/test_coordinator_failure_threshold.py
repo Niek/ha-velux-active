@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+import velux_active.coordinator as coordinator_module
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pyatmo.exceptions import ApiError
 from velux_active.coordinator import (
@@ -26,23 +27,66 @@ def test_failure_threshold_marks_update_failed():
 
 
 async def test_realtime_listener_notifies_only_for_changed_events():
+    processed = asyncio.Event()
+
     class FakeClient:
         async def async_realtime_events(self):
             yield {"changed": True}
             yield {"changed": False}
+            await asyncio.Event().wait()
 
         def apply_realtime_cover_event(self, event):
+            if not event["changed"]:
+                processed.set()
             return event["changed"]
 
     coordinator = object.__new__(VeluxActiveDataUpdateCoordinator)
     coordinator.client = FakeClient()
-    coordinator.data = data = object()
     updates = []
-    coordinator.async_set_updated_data = updates.append
+    coordinator.last_update_success = False
+    coordinator.async_update_listeners = lambda: updates.append(True)
+    coordinator.async_set_updated_data = lambda data: pytest.fail(
+        "Realtime updates must not reset coordinator polling state"
+    )
 
-    await coordinator._async_listen_realtime()
+    task = asyncio.create_task(coordinator._async_listen_realtime())
+    await processed.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
-    assert updates == [data]
+    assert updates == [True]
+    assert coordinator.last_update_success is False
+
+
+async def test_realtime_listener_restarts_after_error(monkeypatch):
+    restarted = asyncio.Event()
+
+    class FakeClient:
+        calls = 0
+
+        async def async_realtime_events(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("subscription failed")
+            restarted.set()
+            await asyncio.Event().wait()
+            yield
+
+        def apply_realtime_cover_event(self, event):
+            return False
+
+    coordinator = object.__new__(VeluxActiveDataUpdateCoordinator)
+    coordinator.client = client = FakeClient()
+    monkeypatch.setattr(coordinator_module, "RECONNECT_DELAY", 0)
+
+    task = asyncio.create_task(coordinator._async_listen_realtime())
+    await restarted.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert client.calls == 2
 
 
 async def test_start_realtime_uses_config_entry_background_task():
