@@ -30,15 +30,15 @@ async def async_setup_entry(
     entry: VeluxActiveConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up VELUX window switches."""
+    """Set up VELUX window/shutter switches."""
     coordinator = entry.runtime_data
     entities = []
     for module_id, module in sorted(coordinator.data.covers.items()):
+        if getattr(module, "silent", None) is not None:
+            entities.append(VeluxSilentModeSwitch(coordinator, module_id))
         if not _module_is_window(module_id, module):
             continue
         entities.append(VeluxAlgorithmSwitch(coordinator, module_id))
-        if getattr(module, "silent", None) is not None:
-            entities.append(VeluxSilentModeSwitch(coordinator, module_id))
     async_add_entities(entities)
 
 
