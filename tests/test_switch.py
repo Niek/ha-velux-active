@@ -31,7 +31,7 @@ class FakeHome:
 class FakeData:
     def __init__(self):
         self.covers = {
-            "blind1": FakeModule("blind1", "blind", silent=False),
+            "shutter1": FakeModule("shutter1", "shutter", silent=False),
             "window1": FakeModule("window1", "window", silent=False),
             "window2": FakeModule("window2", "window"),
         }
@@ -51,12 +51,13 @@ class FakeEntry:
         self.runtime_data = FakeCoordinator()
 
 
-async def test_setup_adds_silent_switch_only_for_capable_windows():
+async def test_setup_adds_silent_switch_to_capable_covers():
     entities = []
 
     await switch.async_setup_entry(None, FakeEntry(), entities.extend)
 
     assert {entity._attr_unique_id for entity in entities} == {
+        "shutter1_silent_operation",
         "window1_auto_ventilation",
         "window1_silent_operation",
         "window2_auto_ventilation",
