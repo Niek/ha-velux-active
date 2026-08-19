@@ -87,6 +87,7 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
         super().__init__(coordinator, module_id)
         self._motion_state: str | None = None
         self._motion_target_position: int | None = None
+        self._gateway_stop_sequence = 0
         self._is_window_device: bool = _module_is_window(module_id, self.module)
 
         entry_data = coordinator.config_entry.data
@@ -263,6 +264,13 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
             self._motion_target_position = None
 
     def _handle_coordinator_update(self) -> None:
+        home = self._get_home()
+        bridge_id = self._get_bridge_id(home) if home is not None else None
+        sequence = self.coordinator.gateway_stop_sequences.get(bridge_id, 0)
+        if sequence != self._gateway_stop_sequence:
+            self._motion_state = None
+            self._motion_target_position = None
+            self._gateway_stop_sequence = sequence
         self._clear_motion_state_if_settled()
         super()._handle_coordinator_update()
 
