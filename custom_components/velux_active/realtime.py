@@ -54,8 +54,8 @@ async def async_iter_events(
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield VELUX embedded events, reconnecting after a connection ends."""
     while True:
+        access_token = await access_token_getter()
         try:
-            access_token = await access_token_getter()
             async with websession.ws_connect(
                 WEBSOCKET_URL,
                 heartbeat=WEBSOCKET_HEARTBEAT,
@@ -81,15 +81,11 @@ async def async_iter_events(
 
                     status = raw.get("status")
                     if status is not None and status != "ok":
-                        raise aiohttp.ClientConnectionError(
-                            f"WebSocket subscription failed: {status}"
-                        )
+                        raise RuntimeError(f"WebSocket subscription failed: {status}")
 
                     if event := extract_embedded_event(raw):
                         yield event
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:
+        except (aiohttp.ClientError, OSError, TimeoutError) as err:
             _LOGGER.debug(
                 "VELUX WebSocket disconnected; reconnecting: %s",
                 err or type(err).__name__,

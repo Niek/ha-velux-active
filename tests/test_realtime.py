@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import aiohttp
+import pytest
 from velux_active.realtime import (
     WEBSOCKET_HEARTBEAT,
     WEBSOCKET_URL,
@@ -139,3 +140,32 @@ async def test_iter_events_reconnects_with_fresh_access_token(monkeypatch):
     assert second_websocket.sent == [build_subscribe_message("token2", "791302006")]
     assert first_websocket.closed is True
     assert second_websocket.closed is True
+
+
+async def test_iter_events_propagates_access_token_failure():
+    session = FakeSession()
+    get_access_token = AsyncMock(side_effect=RuntimeError("Authentication failed"))
+    events = async_iter_events(session, get_access_token, "791302006")
+
+    with pytest.raises(RuntimeError, match="Authentication failed"):
+        await anext(events)
+
+    assert session.connections == []
+
+
+async def test_iter_events_propagates_subscription_failure():
+    websocket = FakeWebSocket(
+        [
+            SimpleNamespace(
+                type=aiohttp.WSMsgType.TEXT,
+                data=json.dumps({"status": "error"}),
+            )
+        ]
+    )
+    session = FakeSession(websocket)
+    events = async_iter_events(session, AsyncMock(return_value="token"), "791302006")
+
+    with pytest.raises(RuntimeError, match="WebSocket subscription failed: error"):
+        await anext(events)
+
+    assert websocket.closed is True
