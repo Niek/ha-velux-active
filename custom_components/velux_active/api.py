@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import Any
@@ -35,7 +35,9 @@ from .const import (
     LOGGER,
     SETCONFIGS_ENDPOINT,
     VELUX_API_URL,
+    VELUX_APP_VERSION,
 )
+from .realtime import async_iter_events
 from .signing import retrieve_key_error
 
 # Work around pyatmo 9.4.0 until https://github.com/jabesq-org/pyatmo/pull/564 is released.
@@ -43,7 +45,6 @@ ScheduleType._value2member_map_.setdefault("algo", ScheduleType.AUTO)
 
 DEFAULT_CLIENT_ID = "5931426da127d981e76bdd3f"
 DEFAULT_CLIENT_SECRET = "6ae2d89d15e767ae5c56b456b452d319"
-DEFAULT_APP_VERSION = "791302006"
 DEFAULT_SCOPE = "velux_scopes"
 DEFAULT_TIMEOUT = 10.0
 DEFAULT_USER_PREFIX = "velux"
@@ -105,6 +106,13 @@ class VeluxActiveData:
 BATTERY_MODULE_TYPES = frozenset({"NXS", "NXD"})
 ROOM_MEASUREMENT_KEYS = frozenset(
     {"temperature", "co2", "humidity", "lux", "air_quality"}
+)
+REALTIME_COVER_FIELDS = (
+    "current_position",
+    "target_position",
+    "reachable",
+    "mode",
+    "last_seen",
 )
 
 
@@ -206,7 +214,7 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         data = {
             "client_id": DEFAULT_CLIENT_ID,
             "client_secret": DEFAULT_CLIENT_SECRET,
-            "app_version": DEFAULT_APP_VERSION,
+            "app_version": VELUX_APP_VERSION,
             **payload,
         }
 
@@ -277,6 +285,14 @@ def _is_cover_module(module: Any) -> bool:
     )
 
 
+def _optional_int(value: Any) -> int | None:
+    """Return an integer value when possible."""
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 class VeluxActiveClient:
     def __init__(
         self,
@@ -296,11 +312,81 @@ class VeluxActiveClient:
         )
         self._account = AsyncAccount(self._auth)
         self._controlled_openers_by_home: dict[str, dict[str, dict[str, str]]] = {}
+        self._realtime_timestamps: dict[tuple[str, str], int] = {}
 
     async def async_validate(self) -> None:
         """Validate credentials by loading account topology and status."""
         await self.async_setup()  # Load topology first
         await self.async_update()
+
+    def async_realtime_events(self) -> AsyncIterator[dict[str, Any]]:
+        """Yield embedded events from the VELUX app WebSocket."""
+        return async_iter_events(
+            self._auth.websession,
+            self._auth.async_get_access_token,
+            VELUX_APP_VERSION,
+        )
+
+    def apply_realtime_cover_event(self, event: Mapping[str, Any]) -> bool:
+        """Apply one partial WebSocket event to known cover objects."""
+        raw_home = event.get("home")
+        if not isinstance(raw_home, Mapping):
+            return False
+
+        home_id = str(raw_home.get("id") or "")
+        home = self._account.homes.get(home_id)
+        if home is None:
+            return False
+
+        raw_modules = raw_home.get("modules")
+        if not isinstance(raw_modules, list):
+            return False
+
+        event_timestamp = _optional_int(event.get("timestamp"))
+        changed = False
+        for raw_module in raw_modules:
+            if not isinstance(raw_module, Mapping):
+                continue
+
+            module_id = str(raw_module.get("id") or "")
+            module = home.modules.get(module_id)
+            if module is None or not _is_cover_module(module):
+                continue
+
+            last_seen = _optional_int(raw_module.get("last_seen"))
+            incoming_timestamp = last_seen if last_seen is not None else event_timestamp
+            timestamp_key = (home_id, module_id)
+            current_timestamp = max(
+                (
+                    timestamp
+                    for timestamp in (
+                        _optional_int(getattr(module, "last_seen", None)),
+                        self._realtime_timestamps.get(timestamp_key),
+                    )
+                    if timestamp is not None
+                ),
+                default=None,
+            )
+            if (
+                incoming_timestamp is not None
+                and current_timestamp is not None
+                and incoming_timestamp < current_timestamp
+            ):
+                continue
+
+            has_realtime_state = False
+            for field in REALTIME_COVER_FIELDS:
+                if field not in raw_module:
+                    continue
+                has_realtime_state = True
+                value = raw_module[field]
+                if getattr(module, field, None) != value:
+                    setattr(module, field, value)
+                    changed = True
+            if has_realtime_state and incoming_timestamp is not None:
+                self._realtime_timestamps[timestamp_key] = incoming_timestamp
+
+        return changed
 
     async def async_get_raw_homesdata(self) -> dict[str, Any]:
         """Return raw homesdata from the Velux API."""

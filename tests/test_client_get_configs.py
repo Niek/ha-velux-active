@@ -78,6 +78,15 @@ def test_parser_accepts_get_configs_command():
     assert args.access_token == "access-token"
 
 
+def test_parser_accepts_watch_events_command():
+    args = client.build_parser().parse_args(
+        ["watch-events", "--access-token", "access-token"]
+    )
+
+    assert args.command == "watch-events"
+    assert args.access_token == "access-token"
+
+
 async def test_set_sync_controlled_openers_uses_confirmed_payload():
     session = FakeSession()
     auth = SimpleNamespace(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -18,6 +19,7 @@ from .api import (
     VeluxActiveInvalidAuth,
 )
 from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
+from .realtime import MAX_RECONNECT_DELAY, RECONNECT_DELAY
 
 type VeluxActiveConfigEntry = ConfigEntry[VeluxActiveDataUpdateCoordinator]
 
@@ -52,8 +54,50 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
         self.client = client
         self.gateway_stop_sequences: dict[str, int] = {}
         self._fast_poll_task: asyncio.Task | None = None
+        self._realtime_task: asyncio.Task[None] | None = None
         self._topology_loaded: bool = False
         self._consecutive_failures: int = 0
+
+    def start_realtime(self) -> None:
+        """Start listening for realtime cover updates."""
+        if self._realtime_task is not None and not self._realtime_task.done():
+            return
+        self._realtime_task = self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_listen_realtime(),
+            f"{DOMAIN} websocket",
+        )
+
+    async def async_stop_realtime(self) -> None:
+        """Stop the realtime listener."""
+        task = self._realtime_task
+        self._realtime_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    async def _async_listen_realtime(self) -> None:
+        """Merge realtime cover events into the current coordinator data."""
+        reconnect_delay = RECONNECT_DELAY
+        while True:
+            try:
+                async for event in self.client.async_realtime_events():
+                    reconnect_delay = RECONNECT_DELAY
+                    if self.client.apply_realtime_cover_event(event):
+                        self.async_update_listeners()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                LOGGER.warning(
+                    "VELUX WebSocket listener stopped; restarting in %.0f seconds: %s",
+                    reconnect_delay,
+                    str(err) or type(err).__name__,
+                )
+
+            await asyncio.sleep(reconnect_delay)
+            reconnect_delay = min(reconnect_delay * 2, MAX_RECONNECT_DELAY)
 
     def start_fast_polling(self) -> None:
         """Switch to fast polling for FAST_POLL_DURATION seconds after a movement."""
