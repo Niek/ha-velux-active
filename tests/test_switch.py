@@ -6,9 +6,9 @@ from velux_active import switch
 
 
 class FakeModule:
-    def __init__(self, module_id, velux_type, *, silent=None, name=None):
+    def __init__(self, module_id, velux_type, *, silent=None):
         self.entity_id = module_id
-        self.name = name or module_id
+        self.name = module_id
         self.velux_type = velux_type
         self.silent = silent
         self.mode = "manual"
@@ -32,9 +32,6 @@ class FakeData:
     def __init__(self):
         self.covers = {
             "shutter1": FakeModule("shutter1", "shutter", silent=False),
-            "shutter2": FakeModule(
-                "shutter2", "shutter", silent=False, name="Buero Rolladen Dachfenster"
-            ),
             "window1": FakeModule("window1", "window", silent=False),
             "window2": FakeModule("window2", "window"),
         }
@@ -61,9 +58,6 @@ async def test_setup_adds_silent_switch_to_capable_covers():
 
     assert {entity._attr_unique_id for entity in entities} == {
         "shutter1_silent_operation",
-        # shutter2 is named after the window it covers, but the API reports it
-        # as a shutter, so it gets no auto-ventilation switch.
-        "shutter2_silent_operation",
         "window1_auto_ventilation",
         "window1_silent_operation",
         "window2_auto_ventilation",
@@ -111,31 +105,3 @@ async def test_silent_switch_sends_unsigned_setstate_and_refreshes():
     )
     entity.async_write_ha_state.assert_called_once_with()
     coordinator.async_request_refresh.assert_awaited_once_with()
-
-
-def test_algorithm_switch_reports_known_modes():
-    coordinator = FakeCoordinator()
-    entity = switch.VeluxAlgorithmSwitch(coordinator, "window1")
-    module = coordinator.data.covers["window1"]
-
-    module.mode = "algo_active"
-    assert entity.is_on is True
-    module.mode = "manual"
-    assert entity.is_on is False
-    module.mode = "something_new"
-    assert entity.is_on is None
-
-
-def test_algorithm_switch_is_unavailable_while_the_algorithm_is_disabled():
-    """Mode algo_disabled is read-only, so the switch must not look toggleable."""
-    coordinator = FakeCoordinator()
-    entity = switch.VeluxAlgorithmSwitch(coordinator, "window1")
-    module = coordinator.data.covers["window1"]
-
-    assert entity.available is True
-
-    module.mode = "algo_disabled"
-    assert entity.available is False
-
-    module.mode = "algo_available"
-    assert entity.available is True

@@ -33,14 +33,12 @@ _LOGGER = logging.getLogger(__name__)
 # Window module identification
 # ---------------------------------------------------------------------------
 # The Velux API uses the same module type (NXO) for both roller shutters and
-# roof windows, but it does report a velux_type ("window"/"shutter") per
-# module. That field is authoritative: the name-keyword fallback below is a
-# guess for modules that report no type at all, and must never override a type
-# the API actually stated.
+# roof windows. The manual allow-list wins; otherwise treat the API velux_type
+# as authoritative and use legacy name-keyword detection only when it is absent.
 #
-# If a module reports no velux_type and its name isn't recognised, you can add
-# its module ID to WINDOW_MODULE_IDS below. Find them in the HA debug logs by
-# enabling debug logging for custom_components.velux_active.
+# If your window names don't match, you can add their module IDs to
+# WINDOW_MODULE_IDS below. Find them in the HA debug logs by enabling debug
+# logging for custom_components.velux_active.
 # ---------------------------------------------------------------------------
 WINDOW_MODULE_IDS: set[str] = set()
 
@@ -51,10 +49,9 @@ def _module_is_window(module_id: str, module: Any) -> bool:
     """Return True if this module is a roof window rather than a shutter.
 
     Checks (in order):
-    1. The manual WINDOW_MODULE_IDS allow-list, so a user override always wins.
-    2. The API velux_type field, which is authoritative whenever it is
-       reported -- including when it reports a shutter.
-    3. The module's name, as a last resort for modules without a velux_type.
+    1. Module ID is in the explicit allow-list WINDOW_MODULE_IDS.
+    2. The API velux_type field when present.
+    3. The module's name when no velux_type is reported.
     """
     if module_id in WINDOW_MODULE_IDS:
         return True
