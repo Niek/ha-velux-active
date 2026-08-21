@@ -126,7 +126,7 @@ The switch changes the window `mode` through the VELUX API (an unsigned command)
 
 ## Window Detection
 
-The VELUX API uses the same module type for some roof windows and shutters. The integration detects roof windows by checking API metadata and common words in the module name, such as `window`, `fenetre`, `fenster`, `raam`, and `finestra`.
+The VELUX API uses the same module type for some roof windows and shutters. Outside the manual override below, the integration treats the reported `velux_type` as authoritative and falls back to common words in the module name, such as `window`, `fenetre`, `fenster`, `raam`, and `finestra`, only when that field is missing.
 
 If your windows are not detected correctly, add their module IDs to `WINDOW_MODULE_IDS` in `cover.py`.
 
