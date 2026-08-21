@@ -23,6 +23,10 @@ WRITE_MODE_OFF = "manual"
 # states; "algo_disabled" is a read-only off state.
 _ON_MODES = frozenset({"algo_available", "algo_active"})
 _OFF_MODES = frozenset({"manual", "algo_disabled"})
+# Because "algo_disabled" is read-only, writing WRITE_MODE_ON has no effect
+# while the gateway reports it. Expose the switch as unavailable in that state
+# instead of as a toggle that silently does nothing.
+_UNAVAILABLE_MODES = frozenset({"algo_disabled"})
 
 
 async def async_setup_entry(
@@ -57,6 +61,14 @@ class VeluxAlgorithmSwitch(VeluxActiveEntity, SwitchEntity):
         # Set after super().__init__, which resets _attr_name to None.
         self._attr_name = "Auto Ventilation"
         self._attr_unique_id = f"{module_id}_auto_ventilation"
+
+    @property
+    def available(self) -> bool:
+        """Return False while the gateway reports the algorithm as disabled."""
+        return (
+            super().available
+            and getattr(self.module, "mode", None) not in _UNAVAILABLE_MODES
+        )
 
     @property
     def is_on(self) -> bool | None:

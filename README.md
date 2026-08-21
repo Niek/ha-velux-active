@@ -119,6 +119,7 @@ For roof windows, the integration exposes an **Auto Ventilation** switch when th
 
 - On: the VELUX gateway can automatically adjust the window based on its ventilation algorithm.
 - Off: the window only moves in response to manual commands from Home Assistant or the VELUX app.
+- Unavailable: the gateway reports the algorithm as `algo_disabled`, a read-only state in which it cannot be switched on at all.
 
 The switch changes the window `mode` through the VELUX API (an unsigned command) and checks the response for API-level errors.
 
@@ -126,9 +127,11 @@ The switch changes the window `mode` through the VELUX API (an unsigned command)
 
 ## Window Detection
 
-The VELUX API uses the same module type for some roof windows and shutters. The integration detects roof windows by checking API metadata and common words in the module name, such as `window`, `fenetre`, `fenster`, `raam`, and `finestra`.
+The VELUX API uses the same module type for some roof windows and shutters, but it usually reports a `velux_type` of `window` or `shutter` per module. That field is used whenever it is present, in both directions -- a module reported as a shutter stays a shutter even when its name mentions a window, as is common for a shutter named after the window it covers.
 
-If your windows are not detected correctly, add their module IDs to `WINDOW_MODULE_IDS` in `cover.py`.
+Only when a module reports no `velux_type` does the integration fall back to common words in the module name, such as `window`, `fenetre`, `fenster`, `raam`, and `finestra`.
+
+If your windows are still not detected correctly, add their module IDs to `WINDOW_MODULE_IDS` in `cover.py`; that list takes precedence over everything else.
 
 To find module IDs, enable debug logging:
 
