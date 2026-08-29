@@ -269,9 +269,11 @@ class VeluxAsyncAuth(pyatmo.AbstractAsyncAuth):
         self,
         response: aiohttp.ClientResponse,
         url: str,
+        params: dict[str, Any] | None = None,
     ) -> aiohttp.ClientResponse:
         """Process API responses and fail on product-level setstate errors."""
 
+        # pyatmo 9.9 passes params to overrides, while 9.4-9.8 do not accept it.
         response = await super().process_response(response, url)
         if not url.endswith(SETSTATE_ENDPOINT):
             return response
