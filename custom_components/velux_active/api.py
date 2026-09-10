@@ -175,6 +175,21 @@ class VeluxActiveAuth(AbstractAsyncAuth):
             }
         )
 
+    async def async_post_api_request(
+        self,
+        endpoint: str,
+        base_url: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> aiohttp.ClientResponse:
+        """Include the API endpoint in transport errors from pyatmo."""
+        try:
+            return await super().async_post_api_request(
+                endpoint, base_url=base_url, params=params
+            )
+        except (aiohttp.ClientError, TimeoutError) as err:
+            reason = str(err) or type(err).__name__
+            raise VeluxActiveCannotConnect(f"{endpoint}: {reason}") from err
+
     async def process_response(
         self,
         response: aiohttp.ClientResponse,
@@ -236,7 +251,8 @@ class VeluxActiveAuth(AbstractAsyncAuth):
                 except Exception:
                     raw = {"raw": text}
         except (aiohttp.ClientError, TimeoutError) as err:
-            raise VeluxActiveCannotConnect(str(err)) from err
+            reason = str(err) or type(err).__name__
+            raise VeluxActiveCannotConnect(f"{AUTH_REQ_ENDPOINT}: {reason}") from err
 
         if not response.ok:
             self._raise_for_auth_response(response.status, raw)
@@ -475,7 +491,8 @@ class VeluxActiveClient:
             ) as response:
                 text = await response.text()
         except (aiohttp.ClientError, TimeoutError) as err:
-            raise VeluxActiveCannotConnect(str(err)) from err
+            reason = str(err) or type(err).__name__
+            raise VeluxActiveCannotConnect(f"{endpoint}: {reason}") from err
 
         if not text.strip():
             raise VeluxActiveCannotConnect(
