@@ -1,29 +1,140 @@
 """Tests for coordinator behavior."""
 
 import asyncio
+import logging
+from json import JSONDecodeError
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import velux_active.coordinator as coordinator_module
+from aiohttp import ClientConnectionError
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pyatmo.exceptions import ApiError
+from velux_active.api import VeluxActiveCannotConnect, VeluxActiveInvalidAuth
 from velux_active.coordinator import (
     _FAILURE_THRESHOLD,
     VeluxActiveDataUpdateCoordinator,
 )
 
 
-def test_failure_threshold_marks_update_failed():
+@pytest.fixture
+def coordinator():
     coordinator = object.__new__(VeluxActiveDataUpdateCoordinator)
     coordinator._consecutive_failures = 0
     coordinator._fast_poll_task = None
-    coordinator.data = previous_data = object()
-    error = ApiError("offline")
+    coordinator._topology_loaded = True
+    coordinator.data = object()
+    coordinator.client = SimpleNamespace(
+        async_setup=AsyncMock(),
+        async_update=AsyncMock(),
+        async_reauthenticate=AsyncMock(),
+    )
+    return coordinator
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ApiError("offline"),
+        VeluxActiveCannotConnect("offline"),
+        ClientConnectionError("offline"),
+        JSONDecodeError("Expecting value", "", 0),
+        TimeoutError(),
+    ],
+)
+async def test_update_failure_threshold_and_recovery(coordinator, error, caplog):
+    previous_data = coordinator.data
+    recovered_data = object()
+    coordinator.client.async_update.side_effect = [error] * (_FAILURE_THRESHOLD + 1) + [
+        recovered_data,
+        error,
+    ]
 
     for _ in range(_FAILURE_THRESHOLD - 1):
-        assert coordinator._handle_update_error(error) is previous_data
+        assert await coordinator._async_update_data() is previous_data
 
-    with pytest.raises(UpdateFailed):
-        coordinator._handle_update_error(error)
+    for _ in range(2):
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+    assert coordinator._consecutive_failures == _FAILURE_THRESHOLD + 1
+    assert not caplog.records  # HA owns outage/recovery transition logging.
+    coordinator.client.async_reauthenticate.assert_not_awaited()
+
+    assert await coordinator._async_update_data() is recovered_data
+    assert coordinator._consecutive_failures == 0
+    coordinator.data = recovered_data
+    assert await coordinator._async_update_data() is recovered_data
+    assert coordinator._consecutive_failures == 1
+
+
+async def test_timeout_error_has_readable_message(coordinator, caplog):
+    coordinator.client.async_update.side_effect = TimeoutError()
+
+    with caplog.at_level(logging.DEBUG, logger="velux_active"):
+        for _ in range(_FAILURE_THRESHOLD - 1):
+            await coordinator._async_update_data()
+
+    assert "keeping previous data: TimeoutError" in caplog.text
+    with pytest.raises(UpdateFailed, match="VELUX ACTIVE: TimeoutError"):
+        await coordinator._async_update_data()
+
+
+async def test_first_update_failure_does_not_return_missing_data(coordinator):
+    coordinator.data = None
+    coordinator.client.async_update.side_effect = VeluxActiveCannotConnect("offline")
+
+    with pytest.raises(UpdateFailed, match="offline"):
+        await coordinator._async_update_data()
+
+
+@pytest.mark.parametrize("failure_stage", ["reauthenticate", "retry"])
+@pytest.mark.parametrize("invalid_auth", [False, True])
+async def test_token_recovery_errors_use_shared_error_handler(
+    coordinator, failure_stage, invalid_auth
+):
+    error = (
+        VeluxActiveInvalidAuth("invalid_grant")
+        if invalid_auth
+        else VeluxActiveCannotConnect("offline")
+    )
+    coordinator.client.async_update.side_effect = [
+        ApiError("403 invalid access token"),
+        error,
+    ]
+    if failure_stage == "reauthenticate":
+        coordinator.client.async_reauthenticate.side_effect = error
+
+    if invalid_auth:
+        with pytest.raises(ConfigEntryAuthFailed) as caught:
+            await coordinator._async_update_data()
+        assert caught.value.__cause__ is error
+    else:
+        assert await coordinator._async_update_data() is coordinator.data
+        assert coordinator._consecutive_failures == 1
+
+    coordinator.client.async_reauthenticate.assert_awaited_once()
+    assert coordinator.client.async_update.await_count == (
+        1 if failure_stage == "reauthenticate" else 2
+    )
+
+
+async def test_token_recovery_success_resets_failure_count(coordinator):
+    recovered_data = object()
+    coordinator._consecutive_failures = _FAILURE_THRESHOLD
+    coordinator.client.async_update.side_effect = [
+        ApiError("403 invalid access token"),
+        recovered_data,
+    ]
+
+    assert await coordinator._async_update_data() is recovered_data
+
+    assert coordinator._consecutive_failures == 0
+    coordinator.client.async_reauthenticate.assert_awaited_once()
+    coordinator.client.async_setup.assert_awaited_once()
+    assert coordinator._topology_loaded is True
 
 
 async def test_realtime_listener_notifies_only_for_changed_events():

@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+import aiohttp
 from homeassistant.components.cover import (
     ATTR_POSITION,
     CoverDeviceClass,
@@ -18,6 +19,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from pyatmo.exceptions import ApiError
 
+from .api import VeluxActiveCannotConnect, VeluxActiveInvalidAuth
 from .batch import BatchCommandError, get_batch_manager
 from .const import (
     CONF_HASH_SIGN_KEY,
@@ -282,10 +284,30 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
     ) -> None:
         """Run a pyatmo command and refresh coordinator data."""
         module = self.module
+        action = (
+            "stop cover"
+            if target_position is None
+            else f"set cover position to {target_position}%"
+        )
+        error_context = f"Could not {action} for {module.name or module.entity_id}"
         try:
             accepted = await command(*args)
-        except ApiError as err:
-            raise HomeAssistantError(str(err)) from err
+        except VeluxActiveInvalidAuth as err:
+            raise HomeAssistantError(
+                f"{error_context}: VELUX authentication failed; "
+                "reauthenticate the integration"
+            ) from err
+        except TimeoutError as err:
+            raise HomeAssistantError(
+                f"{error_context}: timed out waiting for the VELUX service"
+            ) from err
+        except (ApiError, aiohttp.ClientError, VeluxActiveCannotConnect) as err:
+            reason = str(err).strip() or (
+                "VELUX API request failed"
+                if isinstance(err, ApiError)
+                else "could not connect to the VELUX service"
+            )
+            raise HomeAssistantError(f"{error_context}: {reason}") from err
         if accepted is False:
             gateway = module.home.modules.get(module.bridge) if module.bridge else None
             _LOGGER.warning(
@@ -313,6 +335,9 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
                 getattr(gateway, "calibrating", None),
                 getattr(gateway, "is_raining", None),
                 getattr(gateway, "pincode_enabled", None),
+            )
+            raise HomeAssistantError(
+                f"{error_context}: VELUX did not accept the command"
             )
         self._set_motion_state(target_position)
         self.coordinator.start_fast_polling()

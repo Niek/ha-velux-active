@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from datetime import timedelta
+from json import JSONDecodeError
 
+from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from pyatmo.exceptions import ApiError, ApiHomeReachabilityError
+from pyatmo.exceptions import ApiError
 
 from .api import (
     VeluxActiveCannotConnect,
@@ -122,33 +124,28 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
         from causing flickering unavailable states in history.
         """
         try:
-            result = await self._async_fetch_data()
-            self._consecutive_failures = 0  # Reset on success
-            return result
-
-        except ApiError as err:
-            if _is_invalid_token_error(err):
+            try:
+                result = await self._async_fetch_data()
+            except ApiError as err:
+                if not _is_invalid_token_error(err):
+                    raise
                 LOGGER.debug("Stored access token was rejected; logging in again")
                 await self.client.async_reauthenticate()
                 self._topology_loaded = False
-                try:
-                    result = await self._async_fetch_data()
-                    self._consecutive_failures = 0
-                    return result
-                except ApiError as retry_err:
-                    err = retry_err
-
-            return self._handle_update_error(err)
-
+                result = await self._async_fetch_data()
         except VeluxActiveInvalidAuth as err:
             raise ConfigEntryAuthFailed("Authentication failed") from err
-
         except (
+            ApiError,
             VeluxActiveCannotConnect,
-            ApiHomeReachabilityError,
+            ClientError,
+            JSONDecodeError,
             TimeoutError,
         ) as err:
             return self._handle_update_error(err)
+
+        self._consecutive_failures = 0
+        return result
 
     async def _async_fetch_data(self) -> VeluxActiveData:
         """Fetch topology if needed, then return current data."""
@@ -159,7 +156,7 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
 
     def _handle_update_error(self, err: Exception) -> VeluxActiveData:
         """Handle transient update errors using the existing failure threshold."""
-        err_str = str(err)
+        err_str = str(err) or type(err).__name__
 
         # If rate limited, back off immediately
         if "429" in err_str or "API limit" in err_str:
@@ -178,18 +175,12 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
                     "Transient failure %d/%d, keeping previous data: %s",
                     self._consecutive_failures,
                     _FAILURE_THRESHOLD,
-                    err or type(err).__name__,
+                    err_str,
                 )
                 return previous_data
-            LOGGER.warning(
-                "Velux Active update failed %d times in a row: %s",
-                self._consecutive_failures,
-                err or type(err).__name__,
-            )
 
-        raise UpdateFailed(
-            f"Error communicating with VELUX ACTIVE: {err or type(err).__name__}"
-        ) from err
+        # Home Assistant logs the outage and recovery once per transition.
+        raise UpdateFailed(f"Error communicating with VELUX ACTIVE: {err_str}") from err
 
 
 def _is_invalid_token_error(err: Exception) -> bool:
