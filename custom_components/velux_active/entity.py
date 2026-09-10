@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 
+import aiohttp
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .api import DEFAULT_TIMEOUT, VeluxActiveCannotConnect, VeluxActiveInvalidAuth
 from .const import (
     CONTROL_URL,
     DOMAIN,
@@ -128,9 +130,9 @@ async def async_post_setstate(
     *,
     action: str = "Command",
 ) -> None:
-    """POST a setstate request and raise HomeAssistantError on any failure.
+    """POST setstate and translate expected failures into HomeAssistantError.
 
-    Shared by the cover, switch and lock platforms; signed and unsigned
+    Shared by the control platforms; signed and unsigned
     commands differ only in the per-module fields the caller supplies.
     """
     payload = {
@@ -138,24 +140,53 @@ async def async_post_setstate(
         "app_version": VELUX_APP_VERSION,
         "home": {"id": home_id, "timezone": timezone, "modules": modules},
     }
-    access_token = await client._auth.async_get_access_token()
-    session = async_get_clientsession(hass)
-    async with session.post(
-        f"{VELUX_API_URL}/syncapi/v1/setstate",
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-    ) as response:
-        text = await response.text()
-        if not text.strip():
-            raise HomeAssistantError(
-                f"{action} returned empty response (status {response.status})"
-            )
+    try:
+        access_token = await client._auth.async_get_access_token()
+        session = async_get_clientsession(hass)
+        async with session.post(
+            f"{VELUX_API_URL}/syncapi/v1/setstate",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
+        ) as response:
+            text = await response.text()
+    except VeluxActiveInvalidAuth as err:
+        raise HomeAssistantError(
+            f"{action} failed: VELUX authentication failed; "
+            "reauthenticate the integration"
+        ) from err
+    except TimeoutError as err:
+        raise HomeAssistantError(
+            f"{action} timed out waiting for the VELUX service"
+        ) from err
+    except (aiohttp.ClientError, VeluxActiveCannotConnect) as err:
+        reason = str(err).strip() or type(err).__name__
+        raise HomeAssistantError(f"{action} failed: {reason}") from err
+    except UnicodeDecodeError as err:
+        raise HomeAssistantError(
+            f"{action} returned an invalid response encoding"
+        ) from err
+
+    if not response.ok:
+        try:
+            error = json.loads(text)
+        except json.JSONDecodeError:
+            error = None
+        detail = f": {error}" if error is not None else ""
+        raise HomeAssistantError(f"{action} failed (HTTP {response.status}){detail}")
+    if not text.strip():
+        raise HomeAssistantError(
+            f"{action} returned empty response (status {response.status})"
+        )
+    try:
         result = json.loads(text)
-        if not response.ok:
-            raise HomeAssistantError(f"{action} failed: {result}")
-        api_errors = result.get("body", {}).get("errors", [])
-        if api_errors:
-            raise HomeAssistantError(f"{action} errors: {api_errors}")
+    except json.JSONDecodeError as err:
+        raise HomeAssistantError(f"{action} returned an invalid JSON response") from err
+    if not isinstance(result, dict) or not isinstance(result.get("body", {}), dict):
+        raise HomeAssistantError(f"{action} returned an invalid response")
+    api_errors = result.get("body", {}).get("errors", [])
+    if api_errors:
+        raise HomeAssistantError(f"{action} errors: {api_errors}")

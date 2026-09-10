@@ -1,7 +1,11 @@
 """Tests for VELUX window switches."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import aiohttp
+import pytest
+from homeassistant.exceptions import HomeAssistantError
 from velux_active import switch
 
 
@@ -105,3 +109,29 @@ async def test_silent_switch_sends_unsigned_setstate_and_refreshes():
     )
     entity.async_write_ha_state.assert_called_once_with()
     coordinator.async_request_refresh.assert_awaited_once_with()
+
+
+async def test_silent_switch_connection_timeout_does_not_report_success():
+    coordinator = FakeCoordinator()
+    error = aiohttp.ConnectionTimeoutError("Connection timeout to host")
+    pending = AsyncMock()
+    pending.__aenter__.side_effect = error
+    session = SimpleNamespace(post=Mock(return_value=pending))
+    coordinator.hass = SimpleNamespace(
+        session=session, config=SimpleNamespace(time_zone="Europe/Amsterdam")
+    )
+    coordinator.client = SimpleNamespace(
+        _auth=SimpleNamespace(async_get_access_token=AsyncMock(return_value="token"))
+    )
+    entity = switch.VeluxSilentModeSwitch(coordinator, "shutter1")
+    entity.async_write_ha_state = Mock()
+
+    with pytest.raises(HomeAssistantError, match="Silent operation command") as raised:
+        await entity.async_turn_on()
+
+    assert "timed out" in str(raised.value)
+    assert raised.value.__cause__ is error
+    assert entity.is_on is False
+    entity.async_write_ha_state.assert_not_called()
+    coordinator.async_request_refresh.assert_not_awaited()
+    session.post.assert_called_once()
