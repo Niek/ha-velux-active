@@ -20,6 +20,10 @@ _LOGGER = logging.getLogger(__name__)
 class BatchCommandError(Exception):
     """A batched signed command failed. Callers wrap this for the UI."""
 
+    def __init__(self, message: str, *, api_response: dict | None = None) -> None:
+        super().__init__(message)
+        self.api_response = api_response or {}
+
 
 class BatchCommandManager:
     """Collect signed window commands and send them in a single setstate call.
@@ -144,10 +148,12 @@ class BatchCommandManager:
                 elif not response.ok:
                     error = BatchCommandError(f"Signed setstate failed: {text}")
                 else:
-                    api_errors = json.loads(text).get("body", {}).get("errors", [])
+                    api_response = json.loads(text)
+                    api_errors = api_response.get("body", {}).get("errors", [])
                     if api_errors:
                         error = BatchCommandError(
-                            f"Signed setstate errors: {api_errors}"
+                            f"Signed setstate errors: {api_errors}",
+                            api_response=api_response,
                         )
         except Exception as err:
             error = (

@@ -21,6 +21,7 @@ from pyatmo.exceptions import ApiError
 
 from .api import VeluxActiveCannotConnect, VeluxActiveInvalidAuth
 from .batch import BatchCommandError, get_batch_manager
+from .connectivity import gateway_reachable
 from .const import (
     CONF_HASH_SIGN_KEY,
     CONF_SIGN_KEY_GATEWAY_ID,
@@ -190,6 +191,13 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
             try:
                 await batch.queue(self._module_id, ha_position)
             except BatchCommandError as err:
+                if (
+                    gateway_reachable(err.api_response, bridge_id) is False
+                    and self.coordinator.data.gateway_connectivity.get(bridge_id)
+                    is not False
+                ):
+                    self.coordinator.data.gateway_connectivity[bridge_id] = False
+                    self.coordinator.async_update_listeners()
                 raise HomeAssistantError(str(err)) from err
             self._set_motion_state(ha_position)
             self.coordinator.start_fast_polling()

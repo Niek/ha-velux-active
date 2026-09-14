@@ -1,6 +1,7 @@
 """Cover command failures must reach HA without reporting successful movement."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -8,7 +9,14 @@ import aiohttp
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 from pyatmo.exceptions import ApiError
-from velux_active.api import VeluxActiveCannotConnect, VeluxActiveInvalidAuth
+from velux_active import batch
+from velux_active.api import (
+    VeluxActiveCannotConnect,
+    VeluxActiveClient,
+    VeluxActiveInvalidAuth,
+)
+from velux_active.binary_sensor import VeluxGatewayConnectivityBinarySensor
+from velux_active.const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID
 from velux_active.cover import VeluxActiveCover
 
 
@@ -133,3 +141,118 @@ async def test_accepted_stop_clears_optimistic_motion(cover):
     assert cover._motion_target_position is None
     cover.module.async_stop.assert_awaited_once_with()
     cover.coordinator.async_request_refresh.assert_awaited_once_with()
+
+
+@pytest.fixture
+def signed_covers(cover, monkeypatch):
+    class NXG:
+        pass
+
+    coordinator = cover.coordinator
+    coordinator.config_entry.entry_id = "entry1"
+    coordinator.config_entry.data = {
+        CONF_HASH_SIGN_KEY: "AAAAAAAAAAAAAAAAAAAAAA==",
+        CONF_SIGN_KEY_ID: "test-key",
+    }
+    response = SimpleNamespace(ok=True, status=200, text=AsyncMock())
+    pending = AsyncMock()
+    pending.__aenter__.return_value = response
+    session = SimpleNamespace(post=Mock(return_value=pending))
+    coordinator.hass = SimpleNamespace(
+        session=session, config=SimpleNamespace(time_zone="UTC")
+    )
+    coordinator.client = SimpleNamespace(
+        _auth=SimpleNamespace(async_get_access_token=AsyncMock(return_value="token"))
+    )
+    coordinator.async_update_listeners = Mock()
+    coordinator.last_update_success = False
+    coordinator.data.gateway_connectivity = {"gateway1": True, "gateway2": True}
+    home = SimpleNamespace(
+        entity_id="home1",
+        name="Home",
+        modules={"gateway1": NXG(), "gateway2": NXG()},
+        rooms={},
+        update=AsyncMock(),
+    )
+    coordinator.data.homes = {"home1": home}
+    covers = []
+    for index in range(3):
+        module = SimpleNamespace(
+            **{
+                **vars(cover.module),
+                "entity_id": f"window{index}",
+                "velux_type": "window",
+                "bridge": "gateway1",
+            }
+        )
+        coordinator.data.covers[module.entity_id] = module
+        home.modules[module.entity_id] = module
+        entity = VeluxActiveCover(coordinator, module.entity_id)
+        entity.async_write_ha_state = Mock()
+        covers.append(entity)
+    monkeypatch.setattr(batch, "_batch_managers", {})
+    return covers, response
+
+
+@pytest.mark.parametrize(
+    ("api_errors", "disconnected"),
+    [
+        ([{"code": 9, "id": "window0"}, {"code": 6, "id": "gateway1"}], True),
+        ([{"code": 9, "id": "gateway1"}], False),
+        ([{"code": 6, "id": "window0"}], False),
+        ([{"code": 6, "id": "unknown-gateway"}], False),
+        ([None, "invalid"], False),
+    ],
+)
+async def test_signed_command_gateway_connectivity(
+    signed_covers, api_errors, disconnected
+):
+    covers, response = signed_covers
+    coordinator = covers[0].coordinator
+    sensor = VeluxGatewayConnectivityBinarySensor(coordinator, "gateway1")
+    response.text.return_value = json.dumps({"body": {"errors": api_errors}})
+
+    for _ in range(2):
+        errors = await asyncio.gather(
+            *(cover.async_set_cover_position(position=75) for cover in covers),
+            return_exceptions=True,
+        )
+        assert all(isinstance(error, HomeAssistantError) for error in errors)
+        assert all("Signed setstate errors:" in str(error) for error in errors)
+        assert sensor.is_on is (not disconnected)
+        assert coordinator.data.gateway_connectivity["gateway2"] is True
+        assert coordinator.async_update_listeners.call_count == int(disconnected)
+        assert coordinator.last_update_success is False
+        for cover in covers:
+            assert_no_command_effects(cover)
+
+    # A subsequent status poll restores connectivity without any extra state.
+    client = object.__new__(VeluxActiveClient)
+    client._account = SimpleNamespace(user="user", homes=coordinator.data.homes)
+    client._controlled_openers_by_home = {}
+    client.async_get_raw_homestatus = AsyncMock(
+        return_value={"body": {"home": {"modules": [{"id": "gateway1"}]}}}
+    )
+    coordinator.data = await client.async_update()
+    assert sensor.is_on is True
+
+
+@pytest.mark.parametrize(
+    "error", [TimeoutError(), VeluxActiveInvalidAuth("invalid_grant")]
+)
+async def test_signed_transport_or_auth_error_preserves_connectivity(
+    signed_covers, error
+):
+    covers, response = signed_covers
+    coordinator = covers[0].coordinator
+    if isinstance(error, VeluxActiveInvalidAuth):
+        coordinator.client._auth.async_get_access_token.side_effect = error
+    else:
+        response.text.side_effect = error
+
+    with pytest.raises(HomeAssistantError):
+        await covers[0].async_set_cover_position(position=75)
+
+    assert coordinator.data.gateway_connectivity == {"gateway1": True, "gateway2": True}
+    coordinator.async_update_listeners.assert_not_called()
+    assert_no_command_effects(covers[0])
