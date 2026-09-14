@@ -189,4 +189,5 @@ async def async_post_setstate(
         raise HomeAssistantError(f"{action} returned an invalid response")
     api_errors = result.get("body", {}).get("errors", [])
     if api_errors:
+        client.handle_command_response(result)
         raise HomeAssistantError(f"{action} errors: {api_errors}")

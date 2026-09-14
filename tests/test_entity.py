@@ -35,9 +35,10 @@ def request_context():
         session=session,
         hass=SimpleNamespace(session=session),
         client=SimpleNamespace(
+            handle_command_response=Mock(),
             _auth=SimpleNamespace(
                 async_get_access_token=AsyncMock(return_value="token")
-            )
+            ),
         ),
     )
 

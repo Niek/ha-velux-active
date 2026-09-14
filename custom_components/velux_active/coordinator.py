@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from contextlib import suppress
 from datetime import timedelta
 from json import JSONDecodeError
+from typing import Any
 
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry
@@ -20,6 +22,7 @@ from .api import (
     VeluxActiveData,
     VeluxActiveInvalidAuth,
 )
+from .connectivity import gateway_reachable
 from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
 from .realtime import MAX_RECONNECT_DELAY, RECONNECT_DELAY
 
@@ -54,11 +57,27 @@ class VeluxActiveDataUpdateCoordinator(DataUpdateCoordinator[VeluxActiveData]):
             update_interval=UPDATE_INTERVAL,
         )
         self.client = client
+        client.command_response_received = self._handle_command_response
         self.gateway_stop_sequences: dict[str, int] = {}
         self._fast_poll_task: asyncio.Task | None = None
         self._realtime_task: asyncio.Task[None] | None = None
         self._topology_loaded: bool = False
         self._consecutive_failures: int = 0
+
+    def _handle_command_response(self, response: Mapping[str, Any]) -> None:
+        """Publish explicit gateway-unreachable errors without changing poll state."""
+        if self.data is None:
+            return
+        changed = False
+        for gateway_id, connected in self.data.gateway_connectivity.items():
+            if (
+                connected is not False
+                and gateway_reachable(response, gateway_id) is False
+            ):
+                self.data.gateway_connectivity[gateway_id] = False
+                changed = True
+        if changed:
+            self.async_update_listeners()
 
     def start_realtime(self) -> None:
         """Start listening for realtime cover updates."""

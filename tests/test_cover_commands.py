@@ -17,6 +17,7 @@ from velux_active.api import (
 )
 from velux_active.binary_sensor import VeluxGatewayConnectivityBinarySensor
 from velux_active.const import CONF_HASH_SIGN_KEY, CONF_SIGN_KEY_ID
+from velux_active.coordinator import VeluxActiveDataUpdateCoordinator
 from velux_active.cover import VeluxActiveCover
 
 
@@ -161,8 +162,10 @@ def signed_covers(cover, monkeypatch):
     coordinator.hass = SimpleNamespace(
         session=session, config=SimpleNamespace(time_zone="UTC")
     )
-    coordinator.client = SimpleNamespace(
-        _auth=SimpleNamespace(async_get_access_token=AsyncMock(return_value="token"))
+    coordinator.client = VeluxActiveClient(session, "test@example.com", "password")
+    coordinator.client._auth.async_get_access_token = AsyncMock(return_value="token")
+    coordinator.client.command_response_received = lambda response: (
+        VeluxActiveDataUpdateCoordinator._handle_command_response(coordinator, response)
     )
     coordinator.async_update_listeners = Mock()
     coordinator.last_update_success = False

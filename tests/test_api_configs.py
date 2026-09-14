@@ -1,7 +1,6 @@
 """Tests for VELUX controlled opener configuration requests."""
 
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -43,13 +42,9 @@ class FakeSession:
 
 
 def _client_with_response(payload):
-    client = object.__new__(VeluxActiveClient)
     session = FakeSession(payload)
-    client._auth = SimpleNamespace(
-        websession=session,
-        async_get_access_token=AsyncMock(return_value="access-token"),
-    )
-    client._controlled_openers_by_home = {}
+    client = VeluxActiveClient(session, "test@example.com", "password")
+    client._auth.async_get_access_token = AsyncMock(return_value="access-token")
     return client, session
 
 

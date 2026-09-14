@@ -125,12 +125,14 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         password: str,
         initial_tokens: OAuthTokens | None = None,
         token_updated: Callable[[OAuthTokens], None] | None = None,
+        command_response_received: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> None:
         super().__init__(websession)
         self._username = username
         self._password = password
         self._token_updated = token_updated
         self._tokens: OAuthTokens | None = initial_tokens
+        self._command_response_received = command_response_received
 
     async def async_get_access_token(self) -> str:
         if (
@@ -210,6 +212,8 @@ class VeluxActiveAuth(AbstractAsyncAuth):
         body = raw.get("body") if isinstance(raw, dict) else None
         errors = body.get("errors") if isinstance(body, dict) else None
         if errors:
+            if self._command_response_received is not None:
+                self._command_response_received(raw)
             LOGGER.warning(
                 "VELUX Active setstate response returned API errors: "
                 "api_errors=%s api_response=%s",
@@ -321,16 +325,25 @@ class VeluxActiveClient:
         initial_tokens: OAuthTokens | None = None,
         token_updated: Callable[[OAuthTokens], None] | None = None,
     ) -> None:
+        self.command_response_received: Callable[[Mapping[str, Any]], None] | None = (
+            None
+        )
         self._auth = VeluxActiveAuth(
             websession,
             username=username,
             password=password,
             initial_tokens=initial_tokens,
             token_updated=token_updated,
+            command_response_received=self.handle_command_response,
         )
         self._account = AsyncAccount(self._auth)
         self._controlled_openers_by_home: dict[str, dict[str, dict[str, str]]] = {}
         self._realtime_timestamps: dict[tuple[str, str], int] = {}
+
+    def handle_command_response(self, response: Mapping[str, Any]) -> None:
+        """Forward command errors to the coordinator when one is attached."""
+        if self.command_response_received is not None:
+            self.command_response_received(response)
 
     async def async_validate(self) -> None:
         """Validate credentials by loading account topology and status."""
@@ -507,6 +520,8 @@ class VeluxActiveClient:
 
         body = raw.get("body") if isinstance(raw, dict) else None
         errors = body.get("errors") if isinstance(body, dict) else None
+        if errors and method == "POST":
+            self.handle_command_response(raw)
         if (
             not response.ok
             or not isinstance(raw, dict)

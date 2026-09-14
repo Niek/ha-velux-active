@@ -110,6 +110,7 @@ _install_module(
     ButtonDeviceClass=SimpleNamespace(IDENTIFY="identify"),
     ButtonEntity=Stub,
 )
+_install_module("homeassistant.components.lock", LockEntity=Stub)
 _install_module(
     "homeassistant.components.cover",
     ATTR_POSITION="position",
