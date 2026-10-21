@@ -1,5 +1,7 @@
 # VELUX Active with Netatmo - Home Assistant Integration
 
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active&category=integration)
+
 A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 
 - **Roof windows** - open, close, set position, stop. Requires one-time gateway pairing for signing keys.
@@ -14,6 +16,8 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 ## Installation
 
 ### Via HACS
+
+Available in the default HACS repository list.
 
 [![Open Velux Active with Netatmo in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active&category=integration)
 
