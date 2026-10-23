@@ -6,9 +6,9 @@ dependencies = []
 
 [dependency-groups]
 test = [
-  "aiohttp",
-  "cryptography",
-  "pyatmo==9.4.0",
+  "aiohttp>=3.14.5",
+  "cryptography>=50.0.2",
+  "pyatmo==9.9.1",
   "pytest",
   "pytest-asyncio",
   "voluptuous",
@@ -16,6 +16,10 @@ test = [
 
 [tool.uv]
 package = false
+# pyatmo 9.9.1 still requires oauthlib~=3.1. OAuthLib 4 fixes
+# GHSA-xpv3-w29h-x7cv and GHSA-hj66-6f7g-4r5v; its breaking changes affect
+# OAuth providers/JSONP, which the VELUX client does not use.
+override-dependencies = ["oauthlib>=4.0.0,<5"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

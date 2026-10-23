@@ -2,10 +2,13 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#   "aiohttp>=3.7.4,<4.0.0",
-#   "cryptography>=42.0.0",
-#   "pyatmo==9.4.0",
+#   "aiohttp>=3.14.5,<4.0.0",
+#   "cryptography>=50.0.2",
+#   "pyatmo==9.9.1",
 # ]
+# [tool.uv]
+# # See pyproject.toml: pyatmo's OAuthLib 3.x cap excludes the security fixes.
+# override-dependencies = ["oauthlib>=4.0.0,<5"]
 # ///
 """Minimal VELUX ACTIVE CLI backed by upstream pyatmo."""
 

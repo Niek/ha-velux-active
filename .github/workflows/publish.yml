@@ -17,15 +17,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.13"
       - name: Run tests
         run: uv run --frozen --group test pytest -q
       - name: Run Ruff
         run: |
-          uvx ruff@0.16.0 check .
-          uvx ruff@0.16.0 format --check .
+          uvx ruff@0.17.2 check .
+          uvx ruff@0.17.2 format --check .
+      - name: Audit dependencies
+        run: |
+          uv export --frozen --group test --no-emit-project --no-hashes --output-file "$RUNNER_TEMP/requirements-audit.txt"
+          uvx pip-audit@2.10.1 --no-deps --disable-pip --requirement "$RUNNER_TEMP/requirements-audit.txt"
 
   hacs:
     name: HACS validation
