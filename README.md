@@ -172,6 +172,8 @@ When multiple windows are commanded at the same time, commands are sent in a sin
 
 This repository includes `client.py`, a standalone `uv` script for checking login, device discovery, raw API responses, and control commands outside Home Assistant.
 
+The integration and standalone client use the Android app version value `791304000`, corresponding to app 3.4.0.0. For API debugging, the standalone client can override this with `--app-version` or the `VELUX_APP_VERSION` environment variable.
+
 Examples:
 
 ```sh

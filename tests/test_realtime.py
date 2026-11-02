@@ -63,13 +63,13 @@ class FakeSession:
 
 
 def test_build_subscribe_message_matches_android_app():
-    assert build_subscribe_message("token", "791302006") == {
+    assert build_subscribe_message("token", "791304000") == {
         "action": "Subscribe",
         "filter": "silent",
         "access_token": "token",
         "app_type": "app_velux",
         "platform": "Android",
-        "version": "791302006",
+        "version": "791304000",
     }
 
 
@@ -111,13 +111,13 @@ async def test_iter_events_subscribes_and_yields_embedded_payload():
     )
     session = FakeSession(websocket)
     get_access_token = AsyncMock(return_value="token")
-    events = async_iter_events(session, get_access_token, "791302006")
+    events = async_iter_events(session, get_access_token, "791304000")
 
     assert await anext(events) == event
     await events.aclose()
 
     assert session.connections == [(WEBSOCKET_URL, {"heartbeat": WEBSOCKET_HEARTBEAT})]
-    assert websocket.sent == [build_subscribe_message("token", "791302006")]
+    assert websocket.sent == [build_subscribe_message("token", "791304000")]
     assert websocket.closed is True
 
 
@@ -135,14 +135,14 @@ async def test_iter_events_reconnects_with_fresh_access_token(monkeypatch):
     session = FakeSession(first_websocket, second_websocket)
     get_access_token = AsyncMock(side_effect=["token1", "token2"])
     monkeypatch.setattr("velux_active.realtime.RECONNECT_DELAY", 0)
-    events = async_iter_events(session, get_access_token, "791302006")
+    events = async_iter_events(session, get_access_token, "791304000")
 
     assert await anext(events) == event
     await events.aclose()
 
     assert get_access_token.await_count == 2
-    assert first_websocket.sent == [build_subscribe_message("token1", "791302006")]
-    assert second_websocket.sent == [build_subscribe_message("token2", "791302006")]
+    assert first_websocket.sent == [build_subscribe_message("token1", "791304000")]
+    assert second_websocket.sent == [build_subscribe_message("token2", "791304000")]
     assert first_websocket.closed is True
     assert second_websocket.closed is True
 
@@ -150,7 +150,7 @@ async def test_iter_events_reconnects_with_fresh_access_token(monkeypatch):
 async def test_iter_events_propagates_access_token_failure():
     session = FakeSession()
     get_access_token = AsyncMock(side_effect=RuntimeError("Authentication failed"))
-    events = async_iter_events(session, get_access_token, "791302006")
+    events = async_iter_events(session, get_access_token, "791304000")
 
     with pytest.raises(RuntimeError, match="Authentication failed"):
         await anext(events)
@@ -174,7 +174,7 @@ async def test_iter_events_retries_transient_access_token_failure(monkeypatch):
     )
     sleep = AsyncMock()
     monkeypatch.setattr(realtime.asyncio, "sleep", sleep)
-    events = async_iter_events(session, get_access_token, "791302006")
+    events = async_iter_events(session, get_access_token, "791304000")
 
     assert await anext(events) == event
     await events.aclose()
@@ -200,7 +200,7 @@ async def test_iter_events_backs_off_reconnects(monkeypatch):
     )
     sleep = AsyncMock()
     monkeypatch.setattr(realtime.asyncio, "sleep", sleep)
-    events = async_iter_events(session, AsyncMock(return_value="token"), "791302006")
+    events = async_iter_events(session, AsyncMock(return_value="token"), "791304000")
 
     assert await anext(events) == event
     await events.aclose()
@@ -218,7 +218,7 @@ async def test_iter_events_propagates_subscription_failure():
         ]
     )
     session = FakeSession(websocket)
-    events = async_iter_events(session, AsyncMock(return_value="token"), "791302006")
+    events = async_iter_events(session, AsyncMock(return_value="token"), "791304000")
 
     with pytest.raises(RuntimeError, match="WebSocket subscription failed: error"):
         await anext(events)

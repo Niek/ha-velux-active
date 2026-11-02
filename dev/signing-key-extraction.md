@@ -173,10 +173,10 @@ Search for the signing mapper:
 grep -rn "HashMapperKey" ~/velux_patched/smali* | head
 ```
 
-In one tested APK version, the mapper was located at:
+In the decompiled app 3.4.0.0 (`791304000`), the mapper is located at:
 
 ```text
-~/velux_patched/smali/android/br1.smali
+~/velux_patched/smali_classes2/android/hu1.smali
 ```
 
 The exact file and registers can change between app versions. Use nearby `move-result-object` registers when adding log statements.
