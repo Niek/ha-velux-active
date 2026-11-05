@@ -1,8 +1,6 @@
-# VELUX Active with Netatmo - Home Assistant Integration
+# Velux Active with Netatmo - Home Assistant Integration
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active&category=integration)
-
-A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
+A Home Assistant custom integration for Velux Active with Netatmo, supporting:
 
 - **Roof windows** - open, close, set position, stop. Requires one-time gateway pairing for signing keys.
 - **Roller shutters and awning blinds** - open, close, set position, stop. Works out of the box.
@@ -15,21 +13,27 @@ A Home Assistant custom integration for VELUX ACTIVE with NETATMO, supporting:
 
 ## Installation
 
-### Via HACS
+### Via Marketplace
 
-Available in the default HACS repository list.
+Available in the [Home Assistant Marketplace](https://www.home-assistant.io/integrations/marketplace/) catalog. Marketplace is built into Home Assistant 2026.11 and later and replaces HACS.
 
-[![Open Velux Active with Netatmo in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active&category=integration)
+[![Open your Home Assistant instance and open Velux Active with Netatmo in Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Niek&repository=ha-velux-active&category=integration)
 
-1. Click the button above to open the integration in HACS.
-2. Select `Download`.
-3. Restart Home Assistant.
+1. Click the button above, or go to **Settings -> Marketplace** and search for **Velux Active with Netatmo**.
+2. Open the repository, select **Install**, and confirm the installation.
+3. Restart Home Assistant if prompted, then continue with [Setup](#setup).
 
-If the button does not work, open HACS and search for `Velux Active with Netatmo`.
+Existing HACS installations migrate to Marketplace automatically when Home Assistant starts after the upgrade. There is no need to reinstall this integration.
+
+On Home Assistant versions before 2026.11, use HACS: search for **Velux Active with Netatmo**, select **Download**, and restart Home Assistant. The button above also works with HACS.
 
 ### Manual
 
 Copy the `velux_active` folder into your `/config/custom_components/` directory and restart Home Assistant.
+
+### Updates
+
+Marketplace updates appear under **Settings -> Updates**. Install the update there, then restart Home Assistant to apply it.
 
 ---
 
