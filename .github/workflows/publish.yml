@@ -146,6 +146,15 @@ jobs:
           commit_message: "chore: bump manifest version to ${{ steps.version.outputs.tag }}"
           file_pattern: custom_components/velux_active/manifest.json
 
+      - name: Build release zip
+        if: steps.version.outputs.create == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd custom_components/velux_active
+          zip -r "$GITHUB_WORKSPACE/velux_active.zip" . -x '*__pycache__*' -x '*.pyc'
+
       - name: Create GitHub release
         if: steps.version.outputs.create == 'true'
         uses: softprops/action-gh-release@v3
@@ -154,3 +163,4 @@ jobs:
           target_commitish: ${{ steps.manifest_commit.outputs.commit_hash || github.sha }}
           name: ${{ steps.version.outputs.tag }}
           body: ${{ steps.release_notes.outputs.changelog }}
+          files: velux_active.zip

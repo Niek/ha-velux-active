@@ -1,5 +1,7 @@
 {
   "name": "Velux Active with Netatmo",
   "content_in_root": false,
-  "render_readme": true
+  "render_readme": true,
+  "zip_release": true,
+  "filename": "velux_active.zip"
 }
