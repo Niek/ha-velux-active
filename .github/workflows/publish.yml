@@ -164,3 +164,4 @@ jobs:
           name: ${{ steps.version.outputs.tag }}
           body: ${{ steps.release_notes.outputs.changelog }}
           files: velux_active.zip
+          fail_on_unmatched_files: true
