@@ -85,6 +85,7 @@ Advanced/debug signing-key extraction notes are in [`dev/signing-key-extraction.
 After setup, the integration creates entities for supported devices:
 
 - **Roof windows**: `cover.window_name` - open, close, set position, stop.
+  Exposes `secure_position` and `rain_position` attributes when the installed `pyatmo` reports them.
 - **Roof windows**: `switch.window_name_auto_ventilation` - enable or disable automatic ventilation.
 - **Roller shutters / awning blinds**: `cover.blind_name` - open, close, set position, stop.
 - **Gateway**: `lock.velux_gateway_departure_mode` - lock (away) or unlock (home) departure mode.

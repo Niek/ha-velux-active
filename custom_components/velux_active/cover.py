@@ -44,6 +44,10 @@ _LOGGER = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 WINDOW_MODULE_IDS: set[str] = set()
 
+# Optional /homestatus thresholds. pyatmo only parses these once it ships
+# jabesq-org/pyatmo#667; on older releases the attributes are simply absent.
+_OPTIONAL_POSITION_ATTRIBUTES = ("secure_position", "rain_position")
+
 _WINDOW_NAME_KEYWORDS = ("window", "fenetre", "fenêtre", "raam", "fenster", "finestra")
 
 
@@ -136,6 +140,16 @@ class VeluxActiveCover(VeluxActiveEntity, CoverEntity):
     @property
     def is_closing(self) -> bool | None:
         return self._motion_direction() == "closing"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose position thresholds when pyatmo and the module report them."""
+        module = self.module
+        return {
+            key: value
+            for key in _OPTIONAL_POSITION_ATTRIBUTES
+            if (value := getattr(module, key, None)) is not None
+        }
 
     # ------------------------------------------------------------------
     # CoverEntity actions

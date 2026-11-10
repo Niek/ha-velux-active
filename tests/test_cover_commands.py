@@ -45,6 +45,22 @@ def cover():
     return entity
 
 
+def test_position_thresholds_absent_without_pyatmo_support(cover):
+    assert cover.extra_state_attributes == {}
+
+
+def test_position_thresholds_exposed_when_reported(cover):
+    cover.module.secure_position = 0
+    cover.module.rain_position = 50
+    assert cover.extra_state_attributes == {
+        "secure_position": 0,
+        "rain_position": 50,
+    }
+
+    cover.module.rain_position = None
+    assert cover.extra_state_attributes == {"secure_position": 0}
+
+
 def assert_no_command_effects(cover):
     assert cover._motion_state is None
     assert cover._motion_target_position is None
